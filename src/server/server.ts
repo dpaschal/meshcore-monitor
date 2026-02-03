@@ -541,7 +541,7 @@ async function checkForAutoUpgrade(): Promise<void> {
     logger.debug('🔄 Running scheduled auto-upgrade check...');
 
     // Fetch latest release from GitHub
-    const response = await fetch('https://api.github.com/repos/Yeraze/meshmonitor/releases/latest');
+    const response = await fetch('https://api.github.com/repos/dpaschal/meshcore-monitor/releases/latest');
 
     if (!response.ok) {
       logger.warn(`GitHub API returned ${response.status} for scheduled version check`);
@@ -7326,7 +7326,7 @@ apiRouter.get('/version/check', optionalAuth(), async (_req, res) => {
     }
 
     // Fetch latest release from GitHub
-    const response = await fetch('https://api.github.com/repos/Yeraze/meshmonitor/releases/latest');
+    const response = await fetch('https://api.github.com/repos/dpaschal/meshcore-monitor/releases/latest');
 
     if (!response.ok) {
       logger.warn(`GitHub API returned ${response.status} for version check`);

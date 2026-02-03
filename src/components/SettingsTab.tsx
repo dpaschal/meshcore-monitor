@@ -688,9 +688,9 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   return (
     <div className="tab-content">
       <div className="settings-header-card">
-        <img src={`${baseUrl}/logo.png`} alt="MeshMonitor Logo" className="settings-logo" />
+        <img src={`${baseUrl}/logo.png`} alt="MeshCore Monitor Logo" className="settings-logo" />
         <div className="settings-title-section">
-          <h1 className="settings-app-name">MeshMonitor</h1>
+          <h1 className="settings-app-name">MeshCore Monitor</h1>
           <p className="settings-version">Version {version}</p>
         </div>
         <a

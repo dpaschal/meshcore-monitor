@@ -103,8 +103,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     <header className="app-header">
       <div className="header-left">
         <div className="header-title">
-          <img src={`${baseUrl}/logo.png`} alt="MeshMonitor Logo" className="header-logo" />
-          <h1>MeshMonitor</h1>
+          <img src={`${baseUrl}/logo.png`} alt="MeshCore Monitor Logo" className="header-logo" />
+          <h1>MeshCore Monitor</h1>
         </div>
         <div className="node-info">{renderNodeInfo()}</div>
       </div>

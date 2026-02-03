@@ -127,10 +127,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
-        <img src={`${baseUrl}/logo.png`} alt="MeshMonitor Logo" className="sidebar-logo" />
+        <img src={`${baseUrl}/logo.png`} alt="MeshCore Monitor Logo" className="sidebar-logo" />
         {!isCollapsed && (
           <div className="sidebar-header-text">
-            <div className="sidebar-app-name">MeshMonitor</div>
+            <div className="sidebar-app-name">MeshCore Monitor</div>
             {connectedNodeName && (
               <div className="sidebar-node-name">{connectedNodeName}</div>
             )}

@@ -86,7 +86,7 @@ const LoginPage: React.FC = () => {
               strokeWidth="1"
             />
           </svg>
-          <h1>MeshMonitor</h1>
+          <h1>MeshCore Monitor</h1>
         </div>
 
         {/* Login Form */}

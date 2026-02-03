@@ -719,9 +719,9 @@ function App() {
   // Update page title when connected node name changes
   useEffect(() => {
     if (connectedNodeName) {
-      document.title = `MeshMonitor – ${connectedNodeName}`;
+      document.title = `MeshCore Monitor – ${connectedNodeName}`;
     } else {
-      document.title = 'MeshMonitor - Meshtastic Node Monitoring';
+      document.title = 'MeshCore Monitor';
     }
   }, [connectedNodeName]);
 
@@ -4167,7 +4167,7 @@ function App() {
       />
 
       <main className="app-main">
-        {error && (
+        {error && activeTab !== 'meshcore' && (
           <div className="error-panel">
             <h3>Connection Error</h3>
             <p>{error}</p>
