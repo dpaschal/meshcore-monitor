@@ -359,8 +359,12 @@ systemRestoreService.markRestoreStarted();
   }
 })();
 
-// Initialize Meshtastic connection
+// Initialize Meshtastic connection (skip if SKIP_MESHTASTIC=true for MeshCore-only mode)
 setTimeout(async () => {
+  if (process.env.SKIP_MESHTASTIC === 'true') {
+    logger.info('⏭️  Skipping Meshtastic initialization (SKIP_MESHTASTIC=true)');
+    return;
+  }
   try {
     // Load saved traceroute interval from database before connecting
     const savedInterval = databaseService.getSetting('tracerouteIntervalMinutes');

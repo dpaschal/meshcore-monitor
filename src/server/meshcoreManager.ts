@@ -236,7 +236,7 @@ class MeshCoreManager extends EventEmitter {
         resolve();
       });
 
-      this.serialPort.on('error', (err) => {
+      this.serialPort.on('error', (err: Error) => {
         logger.error('[MeshCore] Serial port error:', err);
         reject(err);
       });

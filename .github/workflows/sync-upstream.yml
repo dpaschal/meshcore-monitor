@@ -1,0 +1,65 @@
+name: Sync Fork with Upstream
+
+on:
+  schedule:
+    # Run daily at 6 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/Yeraze/meshmonitor.git
+          git fetch upstream
+
+      - name: Check for upstream changes
+        id: check
+        run: |
+          UPSTREAM_COMMITS=$(git rev-list HEAD..upstream/main --count)
+          echo "upstream_commits=$UPSTREAM_COMMITS" >> $GITHUB_OUTPUT
+          if [ "$UPSTREAM_COMMITS" -gt 0 ]; then
+            echo "Found $UPSTREAM_COMMITS new commits from upstream"
+          else
+            echo "Fork is up to date with upstream"
+          fi
+
+      - name: Merge upstream changes
+        if: steps.check.outputs.upstream_commits > 0
+        run: |
+          # Create a sync branch for the merge
+          git checkout -b upstream-sync
+
+          # Merge upstream changes
+          git merge upstream/main --no-edit -m "Sync with upstream Yeraze/meshmonitor"
+
+          # Push to main
+          git checkout main
+          git merge upstream-sync --no-edit
+          git push origin main
+
+      - name: Create sync summary
+        if: steps.check.outputs.upstream_commits > 0
+        run: |
+          echo "## Upstream Sync Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Merged ${{ steps.check.outputs.upstream_commits }} commits from [Yeraze/meshmonitor](https://github.com/Yeraze/meshmonitor)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Recent upstream commits:" >> $GITHUB_STEP_SUMMARY
+          git log upstream/main -5 --oneline >> $GITHUB_STEP_SUMMARY
