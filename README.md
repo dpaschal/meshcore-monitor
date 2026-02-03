@@ -1,144 +1,73 @@
-# MeshMonitor
+# MeshCore Monitor
 
-[![CI](https://github.com/Yeraze/meshmonitor/actions/workflows/ci.yml/badge.svg)](https://github.com/Yeraze/meshmonitor/actions/workflows/ci.yml)
-[![PR Tests](https://github.com/Yeraze/meshmonitor/actions/workflows/pr-tests.yml/badge.svg)](https://github.com/Yeraze/meshmonitor/actions/workflows/pr-tests.yml)
-[![Docker Image](https://ghcr-badge.egpl.dev/yeraze/meshmonitor/latest_tag?color=%235b4566&ignore=latest,main,dev&label=version&trim=)](https://github.com/Yeraze/meshmonitor/pkgs/container/meshmonitor)
-[![Docker Pulls](https://ghcr-badge.egpl.dev/yeraze/meshmonitor/size?color=%235b4566&tag=latest&label=image%20size&trim=)](https://github.com/Yeraze/meshmonitor/pkgs/container/meshmonitor)
-[![License](https://img.shields.io/github/license/Yeraze/meshmonitor)](https://github.com/Yeraze/meshmonitor/blob/main/LICENSE)
-[![Translation Status](https://hosted.weblate.org/widgets/meshmonitor/-/svg-badge.svg)](https://hosted.weblate.org/engage/meshmonitor/)
+A comprehensive web application for monitoring MeshCore mesh networks. Forked from [MeshMonitor](https://github.com/Yeraze/meshmonitor) (BSD-3-Clause) and adapted for the MeshCore protocol.
 
-A comprehensive web application for monitoring Meshtastic mesh networks over IP. Built with React, TypeScript, and Node.js, featuring a beautiful Catppuccin Mocha dark theme and persistent SQLite database storage.
+**Status:** Early Development - Community Contributions Welcome!
 
-![MeshMonitor Interface](docs/images/main.png)
+## About
 
-![MeshMonitor Interface](docs/images/channels.png)
+MeshCore Monitor aims to provide a web-based monitoring interface for [MeshCore](https://github.com/meshcore-dev/MeshCore) mesh networks, similar to what MeshMonitor provides for Meshtastic.
 
-## Documentation
+### What is MeshCore?
 
-For complete documentation, visit **[meshmonitor.org](https://meshmonitor.org/)**
+MeshCore is a lightweight, hybrid routing mesh protocol for packet radios. Unlike Meshtastic, MeshCore focuses on:
+- Lightweight multi-hop packet routing
+- Simpler protocol design
+- Optimized for embedded systems
+- MIT licensed (fully open source)
 
-- **[Getting Started Guide](https://meshmonitor.org/getting-started.html)** - Installation and quick start
-- **[FAQ](https://meshmonitor.org/faq.html)** - Frequently asked questions and troubleshooting
-- **[Configuration](https://meshmonitor.org/configuration/)** - Detailed configuration options
-- **[Development](https://meshmonitor.org/development/)** - Contributing and development setup
+## Project Status
 
-## Quick Start
+This project is a **work in progress**. We're adapting the excellent MeshMonitor codebase to work with MeshCore's different protocol.
 
-Get MeshMonitor running in **60 seconds**:
+### Key Differences from MeshMonitor
 
-```bash
-# 1. Create docker-compose.yml
-cat > docker-compose.yml << 'EOF'
-services:
-  meshmonitor:
-    image: ghcr.io/yeraze/meshmonitor:latest
-    ports:
-      - "8080:3001"
-    volumes:
-      - meshmonitor-data:/data
-    environment:
-      - MESHTASTIC_NODE_IP=192.168.1.100  # Change to your node's IP
-    restart: unless-stopped
+| Feature | MeshMonitor (Meshtastic) | MeshCore Monitor |
+|---------|--------------------------|------------------|
+| Protocol | Protobuf over HTTP/BLE | Binary protocol (Companion) / Text CLI (Repeater) |
+| Node IDs | 32-bit nodeNum | Public keys (hex) |
+| Connection | HTTP API to node | Serial/TCP to device |
+| Channels | PSK-based channels | Different channel model |
 
-volumes:
-  meshmonitor-data:
-EOF
+### Roadmap
 
-# 2. Start MeshMonitor
-docker compose up -d
+See [ROADMAP.md](ROADMAP.md) for the development plan.
 
-# 3. Open http://localhost:8080
-```
+**Phase 1 - Core Adaptation:**
+- [ ] Replace MeshtasticManager with MeshCoreManager
+- [ ] Update database schema for MeshCore fields
+- [ ] Implement serial/TCP connection layer
+- [ ] Basic node discovery and display
 
-**Default login:** `admin` / `changeme` (change after first login!)
+**Phase 2 - Features:**
+- [ ] Message sending/receiving
+- [ ] Admin commands (login, status, etc.)
+- [ ] Repeater management
+- [ ] Contact list display
 
-For detailed installation instructions, configuration options, and deployment scenarios, see the **[Getting Started Guide](https://meshmonitor.org/getting-started.html)**.
+**Phase 3 - Polish:**
+- [ ] UI updates for MeshCore terminology
+- [ ] Documentation
+- [ ] Docker images
+- [ ] Testing
 
-## Deployment Options
-
-MeshMonitor supports multiple deployment methods:
-
-- **🐳 Docker** (Recommended) - Pre-built multi-architecture images with auto-upgrade support
-  - [Docker Compose Guide](docs/deployment/DEPLOYMENT_GUIDE.md)
-  - Platforms: amd64, arm64, armv7
-
-- **☸️ Kubernetes** - Helm charts for production clusters
-  - [Helm Chart](helm/meshmonitor/)
-  - GitOps-ready with ArgoCD/Flux support
-
-- **📦 Proxmox LXC** - Lightweight containers for Proxmox VE
-  - [Proxmox LXC Guide](docs/deployment/PROXMOX_LXC_GUIDE.md)
-  - Pre-built templates available
-  - Community-supported alternative
-
-- **🔧 Manual** - Direct Node.js deployment
-  - [Manual Installation Guide](docs/deployment/DEPLOYMENT_GUIDE.md#manual-nodejs-deployment)
-  - For development or custom setups
-
-- **🖥️ Desktop Apps** - Native applications for Windows and macOS
-  - Download from [GitHub Releases](https://github.com/Yeraze/meshmonitor/releases)
-  - Runs as a system tray application
-  - Windows (.exe) and macOS (.dmg) installers available
-
-## Key Features
-
-- **Real-time Mesh Monitoring** - Live node discovery, telemetry, and message tracking
-- **Modern UI** - Catppuccin theme with message reactions and threading
-- **Interactive Maps** - Node positions and network topology visualization
-- **Persistent Storage** - SQLite database with export/import capabilities
-- **Notifications** - Web Push and Apprise integration for 100+ services
-- **Authentication** - Local and OIDC/SSO support with RBAC
-- **Security Monitoring** - Encryption key analysis and vulnerability detection
-- **Device Configuration** - Full node configuration UI
-- **Docker Ready** - Pre-built multi-architecture images
-- **🆕 One-click Self-Upgrade** - Automatic upgrades from the UI with backup and rollback
-- **🆕 System Backup & Restore** - Complete disaster recovery with automated backups
-
-For a complete feature list and technical details, visit **[meshmonitor.org](https://meshmonitor.org/)**.
-
-## Development
-
-### Prerequisites
-
-- Node.js 20+ or 22+ (Node.js 18 is deprecated)
-- Docker (recommended) or local Node.js environment
-- A Meshtastic device with WiFi/Ethernet connectivity
-
-### Local Development
+## Quick Start (Development)
 
 ```bash
-# Clone with submodules
-git clone --recurse-submodules https://github.com/Yeraze/meshmonitor.git
-cd meshmonitor
+# Clone the repo
+git clone https://github.com/dpaschal/meshcore-monitor.git
+cd meshcore-monitor
 
 # Install dependencies
 npm install
 
 # Configure environment
 cp .env.example .env
-# Edit .env with your Meshtastic node's IP address
+# Edit .env - set MESHCORE_SERIAL_PORT or MESHCORE_TCP_HOST
 
 # Start development servers
 npm run dev:full
 ```
-
-This starts both the React dev server (port 5173) and the Express API server (port 3001).
-
-### Available Scripts
-
-**Development:**
-- `npm run dev` - Start React development server
-- `npm run dev:server` - Start Express API server
-- `npm run dev:full` - Start both development servers
-- `npm run build` - Build React app for production
-- `npm run build:server` - Build Express server for production
-
-**Testing & Quality:**
-- `npm run test` - Run tests in watch mode
-- `npm run test:run` - Run all tests once
-- `npm run test:coverage` - Generate coverage report
-- `npm run lint` - Run ESLint
-- `npm run typecheck` - Run TypeScript compiler checks
 
 ## Technology Stack
 
@@ -146,59 +75,52 @@ This starts both the React dev server (port 5173) and the Express API server (po
 - React 19 with TypeScript
 - Vite 7 (build tool)
 - CSS3 with Catppuccin theme
-- Translation support crowdsourced by [Weblate](https://hosted.weblate.org/projects/meshmonitor/)
 
 **Backend:**
 - Node.js with Express 5
 - TypeScript
 - better-sqlite3 (SQLite driver)
-
-**DevOps:**
-- Docker with multi-stage builds
-- Docker Compose for orchestration
-- GitHub Container Registry for images
+- meshcore Python library (via child process) or native serial
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
+This is a community project! Contributions are welcome:
 
-- Development setup
-- Testing requirements
-- Code style guidelines
-- Pull request process
-- CI/CD workflows
-
-Quick start:
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes and add tests
-4. Run tests locally (`npm run test:run`)
-5. Commit with conventional commits (`feat: add amazing feature`)
-6. Push and create a Pull Request
+2. Create a feature branch
+3. Make your changes
+4. Submit a Pull Request
+
+**Areas that need help:**
+- MeshCore protocol expertise
+- Serial/binary protocol handling in Node.js
+- Testing with real MeshCore devices
+- Documentation
 
 ## License
 
 This project is licensed under the BSD-3-Clause License - see the [LICENSE](LICENSE) file for details.
 
-## Community & Support
+### Attribution
 
-- **Discord**: [Join our Discord](https://discord.gg/JVR3VBETQE) - Chat with the community and get help
-- **GitHub Issues**: Report bugs and request features
-- **Documentation**: [meshmonitor.org](https://meshmonitor.org/)
+This project is a fork of [MeshMonitor](https://github.com/Yeraze/meshmonitor) by Yeraze, licensed under BSD-3-Clause. Original copyright and license terms are preserved.
+
+## Links
+
+- [MeshCore GitHub](https://github.com/meshcore-dev/MeshCore) - The MeshCore firmware
+- [MeshCore Python Library](https://pypi.org/project/meshcore/) - Python library for MeshCore
+- [Original MeshMonitor](https://github.com/Yeraze/meshmonitor) - The project this is forked from
+- [MeshCore Flasher](https://flasher.meshcore.co.uk/) - Flash MeshCore firmware
 
 ## Acknowledgments
 
-- [Meshtastic](https://meshtastic.org/) - Open source mesh networking
+- [Yeraze](https://github.com/Yeraze) - Original MeshMonitor author
+- [MeshCore Team](https://github.com/meshcore-dev) - MeshCore firmware
 - [Catppuccin](https://catppuccin.com/) - Soothing pastel theme
 - [React](https://reactjs.org/) - Frontend framework
-- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - SQLite driver
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=Yeraze/meshmonitor&type=date&legend=top-left)](https://www.star-history.com/#Yeraze/meshmonitor&type=date&legend=top-left)
 
 ---
 
-**MeshMonitor** - Monitor your mesh, beautifully. 🌐✨
+**MeshCore Monitor** - Monitor your MeshCore mesh, beautifully.
 
-_This application is brought to you with help from [Claude Code](https://claude.ai/code)._
+_Free and open source for the community._
