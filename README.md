@@ -4,6 +4,7 @@
 [![Security Scan](https://github.com/dpaschal/meshcore-monitor/actions/workflows/security-scan.yml/badge.svg)](https://github.com/dpaschal/meshcore-monitor/actions/workflows/security-scan.yml)
 [![Upstream](https://img.shields.io/badge/upstream-Yeraze%2Fmeshmonitor-blue)](https://github.com/Yeraze/meshmonitor)
 [![License](https://img.shields.io/badge/license-BSD--3--Clause-green)](LICENSE)
+[![Buy Me A Coffee](https://img.shields.io/badge/☕-Buy%20Me%20A%20Coffee-yellow)](https://buymeacoffee.com/dpaschal)
 
 A comprehensive web application for monitoring **both Meshtastic and MeshCore** mesh networks.
 
