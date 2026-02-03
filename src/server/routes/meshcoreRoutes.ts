@@ -14,7 +14,7 @@ const router = Router();
  * GET /api/meshcore/status
  * Get connection status and local node info
  */
-router.get('/status', async (req: Request, res: Response) => {
+router.get('/status', async (_req: Request, res: Response) => {
   try {
     const status = meshcoreManager.getConnectionStatus();
     const localNode = meshcoreManager.getLocalNode();
@@ -73,7 +73,7 @@ router.post('/connect', async (req: Request, res: Response) => {
  * POST /api/meshcore/disconnect
  * Disconnect from the device
  */
-router.post('/disconnect', async (req: Request, res: Response) => {
+router.post('/disconnect', async (_req: Request, res: Response) => {
   try {
     await meshcoreManager.disconnect();
     res.json({ success: true, message: 'Disconnected' });
@@ -87,7 +87,7 @@ router.post('/disconnect', async (req: Request, res: Response) => {
  * GET /api/meshcore/nodes
  * Get all known nodes (local + contacts)
  */
-router.get('/nodes', async (req: Request, res: Response) => {
+router.get('/nodes', async (_req: Request, res: Response) => {
   try {
     const nodes = meshcoreManager.getAllNodes();
     res.json({
@@ -105,7 +105,7 @@ router.get('/nodes', async (req: Request, res: Response) => {
  * GET /api/meshcore/contacts
  * Get contacts list
  */
-router.get('/contacts', async (req: Request, res: Response) => {
+router.get('/contacts', async (_req: Request, res: Response) => {
   try {
     const contacts = meshcoreManager.getContacts();
     res.json({
@@ -123,7 +123,7 @@ router.get('/contacts', async (req: Request, res: Response) => {
  * POST /api/meshcore/contacts/refresh
  * Refresh contacts from device
  */
-router.post('/contacts/refresh', async (req: Request, res: Response) => {
+router.post('/contacts/refresh', async (_req: Request, res: Response) => {
   try {
     const contacts = await meshcoreManager.refreshContacts();
     res.json({
@@ -185,7 +185,7 @@ router.post('/messages/send', async (req: Request, res: Response) => {
  * POST /api/meshcore/advert
  * Send an advertisement
  */
-router.post('/advert', async (req: Request, res: Response) => {
+router.post('/advert', async (_req: Request, res: Response) => {
   try {
     const success = await meshcoreManager.sendAdvert();
 

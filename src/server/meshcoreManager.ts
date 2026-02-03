@@ -172,7 +172,7 @@ class MeshCoreManager extends EventEmitter {
     }
 
     // Clear pending commands
-    for (const [id, cmd] of this.pendingCommands) {
+    for (const [_id, cmd] of this.pendingCommands) {
       clearTimeout(cmd.timeout);
       cmd.reject(new Error('Disconnected'));
     }
@@ -191,7 +191,7 @@ class MeshCoreManager extends EventEmitter {
    * Get configuration from environment variables
    */
   private getConfigFromEnv(): MeshCoreConfig | null {
-    const env = getEnvironmentConfig();
+    // Note: Could use getEnvironmentConfig() for more complex config in the future
 
     // Check for serial port config
     const serialPort = process.env.MESHCORE_SERIAL_PORT;
@@ -326,11 +326,11 @@ class MeshCoreManager extends EventEmitter {
     }
 
     return new Promise((resolve, reject) => {
-      const id = `cmd_${++this.commandId}`;
+      const cmdId = `cmd_${++this.commandId}`;
       let response = '';
 
       const timeoutHandle = setTimeout(() => {
-        this.pendingCommands.delete(id);
+        this.pendingCommands.delete(cmdId);
         this.removeListener('serial_data', dataHandler);
         reject(new Error(`Command timeout: ${command}`));
       }, timeout);
@@ -340,13 +340,13 @@ class MeshCoreManager extends EventEmitter {
         // Check for command completion (prompt or specific response)
         if (data.includes('>') || data.includes('OK') || data.includes('Error')) {
           clearTimeout(timeoutHandle);
-          this.pendingCommands.delete(id);
+          this.pendingCommands.delete(cmdId);
           this.removeListener('serial_data', dataHandler);
           resolve(response.trim());
         }
       };
 
-      this.pendingCommands.set(id, { resolve, reject, timeout: timeoutHandle });
+      this.pendingCommands.set(cmdId, { resolve, reject, timeout: timeoutHandle });
       this.on('serial_data', dataHandler);
 
       logger.debug(`[MeshCore] TX: ${command}`);
