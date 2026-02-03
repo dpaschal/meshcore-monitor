@@ -1,4 +1,4 @@
-name: Sync Fork with Upstream
+name: Sync with Upstream
 
 on:
   schedule:
@@ -32,34 +32,118 @@ jobs:
       - name: Check for upstream changes
         id: check
         run: |
-          UPSTREAM_COMMITS=$(git rev-list HEAD..upstream/main --count)
+          UPSTREAM_COMMITS=$(git rev-list HEAD..upstream/main --count 2>/dev/null || echo "0")
+          UPSTREAM_VERSION=$(git show upstream/main:package.json | grep '"version"' | sed 's/.*"version": "\(.*\)".*/\1/' || echo "unknown")
+          FORK_VERSION=$(cat package.json | grep '"version"' | sed 's/.*"version": "\(.*\)".*/\1/' || echo "unknown")
+          UPSTREAM_SHA=$(git rev-parse upstream/main)
+          FORK_SHA=$(git rev-parse HEAD)
+
           echo "upstream_commits=$UPSTREAM_COMMITS" >> $GITHUB_OUTPUT
+          echo "upstream_version=$UPSTREAM_VERSION" >> $GITHUB_OUTPUT
+          echo "fork_version=$FORK_VERSION" >> $GITHUB_OUTPUT
+          echo "upstream_sha=$UPSTREAM_SHA" >> $GITHUB_OUTPUT
+          echo "fork_sha=$FORK_SHA" >> $GITHUB_OUTPUT
+
           if [ "$UPSTREAM_COMMITS" -gt 0 ]; then
-            echo "Found $UPSTREAM_COMMITS new commits from upstream"
+            echo "Found $UPSTREAM_COMMITS new commits from upstream (v$UPSTREAM_VERSION)"
+            echo "needs_sync=true" >> $GITHUB_OUTPUT
           else
             echo "Fork is up to date with upstream"
+            echo "needs_sync=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Merge upstream changes
-        if: steps.check.outputs.upstream_commits > 0
+        if: steps.check.outputs.needs_sync == 'true'
+        id: merge
         run: |
-          # Create a sync branch for the merge
-          git checkout -b upstream-sync
+          # Try to merge upstream changes
+          if git merge upstream/main --no-edit -m "Sync with upstream Yeraze/meshmonitor v${{ steps.check.outputs.upstream_version }}"; then
+            echo "merge_status=success" >> $GITHUB_OUTPUT
+            git push origin main
+          else
+            echo "merge_status=conflict" >> $GITHUB_OUTPUT
+            git merge --abort
+          fi
 
-          # Merge upstream changes
-          git merge upstream/main --no-edit -m "Sync with upstream Yeraze/meshmonitor"
-
-          # Push to main
-          git checkout main
-          git merge upstream-sync --no-edit
-          git push origin main
-
-      - name: Create sync summary
-        if: steps.check.outputs.upstream_commits > 0
+      - name: Update sync status file
         run: |
-          echo "## Upstream Sync Complete" >> $GITHUB_STEP_SUMMARY
+          mkdir -p .github
+
+          # Determine sync status
+          if [ "${{ steps.check.outputs.needs_sync }}" == "false" ]; then
+            STATUS="✅ In Sync"
+            STATUS_DESC="This fork is up to date with upstream."
+          elif [ "${{ steps.merge.outputs.merge_status }}" == "success" ]; then
+            STATUS="✅ Just Synced"
+            STATUS_DESC="Successfully merged ${{ steps.check.outputs.upstream_commits }} commits from upstream."
+          elif [ "${{ steps.merge.outputs.merge_status }}" == "conflict" ]; then
+            STATUS="⚠️ Conflict"
+            STATUS_DESC="Merge conflict detected. Manual intervention required."
+          else
+            STATUS="ℹ️ Checked"
+            STATUS_DESC="Sync check completed."
+          fi
+
+          cat > .github/SYNC_STATUS.md << EOF
+          # Upstream Sync Status
+
+          **Status:** $STATUS
+
+          $STATUS_DESC
+
+          ## Details
+
+          | Property | Value |
+          |----------|-------|
+          | **Upstream Repo** | [Yeraze/meshmonitor](https://github.com/Yeraze/meshmonitor) |
+          | **Upstream Version** | v${{ steps.check.outputs.upstream_version }} |
+          | **Fork Version** | v${{ steps.check.outputs.fork_version }} |
+          | **Last Check** | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |
+          | **Upstream Commit** | \`${{ steps.check.outputs.upstream_sha }}\` |
+
+          ## About This Fork
+
+          MeshCore Monitor is a fork of MeshMonitor adapted for the MeshCore protocol.
+          We automatically sync with upstream daily to incorporate bug fixes and improvements,
+          while maintaining our MeshCore-specific features.
+
+          ### Sync Schedule
+          - **Automatic:** Daily at 6:00 AM UTC
+          - **Manual:** Can be triggered from [Actions](https://github.com/dpaschal/meshcore-monitor/actions/workflows/sync-upstream.yml)
+
+          ### What Gets Synced
+          - Bug fixes and security patches
+          - UI improvements
+          - New features (adapted for MeshCore where applicable)
+
+          ### MeshCore-Specific Features (Not in Upstream)
+          - MeshCore protocol support (Companion & Repeater firmware)
+          - Serial/TCP connection to MeshCore devices
+          - Public key based node identification
+          - MeshCore admin commands
+
+          ---
+          *This file is automatically updated by the sync workflow.*
+          EOF
+
+          git add .github/SYNC_STATUS.md
+          if git diff --staged --quiet; then
+            echo "No changes to sync status"
+          else
+            git commit -m "Update sync status [skip ci]"
+            git push origin main
+          fi
+
+      - name: Create workflow summary
+        run: |
+          echo "## Upstream Sync Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Merged ${{ steps.check.outputs.upstream_commits }} commits from [Yeraze/meshmonitor](https://github.com/Yeraze/meshmonitor)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Recent upstream commits:" >> $GITHUB_STEP_SUMMARY
-          git log upstream/main -5 --oneline >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Upstream Version | v${{ steps.check.outputs.upstream_version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Fork Version | v${{ steps.check.outputs.fork_version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commits Behind | ${{ steps.check.outputs.upstream_commits }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Sync Needed | ${{ steps.check.outputs.needs_sync }} |" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.merge.outputs.merge_status }}" != "" ]; then
+            echo "| Merge Status | ${{ steps.merge.outputs.merge_status }} |" >> $GITHUB_STEP_SUMMARY
+          fi

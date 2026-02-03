@@ -1,8 +1,13 @@
 # MeshCore Monitor
 
+[![Sync with Upstream](https://github.com/dpaschal/meshcore-monitor/actions/workflows/sync-upstream.yml/badge.svg)](https://github.com/dpaschal/meshcore-monitor/actions/workflows/sync-upstream.yml)
+[![Upstream](https://img.shields.io/badge/upstream-Yeraze%2Fmeshmonitor-blue)](https://github.com/Yeraze/meshmonitor)
+
 A comprehensive web application for monitoring MeshCore mesh networks. Forked from [MeshMonitor](https://github.com/Yeraze/meshmonitor) (BSD-3-Clause) and adapted for the MeshCore protocol.
 
 **Status:** Early Development - Community Contributions Welcome!
+
+> **Upstream Sync:** This fork automatically syncs with [Yeraze/meshmonitor](https://github.com/Yeraze/meshmonitor) daily to incorporate upstream improvements. See [sync status](.github/SYNC_STATUS.md) for details.
 
 ## About
 
