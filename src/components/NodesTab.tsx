@@ -1065,7 +1065,13 @@ const NodesTabComponent: React.FC<NodesTabProps> = ({
                 }
                 return true;
               }).length;
+              const meshCoreCount = showMeshCoreNodes ? meshCoreNodes.length : 0;
               const isFiltered = securityFilter !== 'all' || !showIncompleteNodes;
+              if (meshCoreCount > 0) {
+                return isFiltered
+                  ? `${filteredCount}/${processedNodes.length} + ${meshCoreCount} MC`
+                  : `${filteredCount} + ${meshCoreCount} MC`;
+              }
               return isFiltered ? `${filteredCount}/${processedNodes.length}` : processedNodes.length;
             })()})</h3>
           </div>
@@ -1146,6 +1152,104 @@ const NodesTabComponent: React.FC<NodesTabProps> = ({
         </div>
         {!isNodeListCollapsed && (
         <div className="nodes-list">
+          {/* MeshCore nodes section - shows regardless of Meshtastic connection */}
+          {showMeshCoreNodes && meshCoreNodes.length > 0 && (
+            <div className="meshcore-section">
+              <div className="meshcore-section-header" style={{
+                padding: '8px 12px',
+                background: 'rgba(147, 51, 234, 0.1)',
+                borderBottom: '1px solid rgba(147, 51, 234, 0.3)',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                color: '#9333ea',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                <span style={{
+                  background: '#9333ea',
+                  color: 'white',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  fontSize: '10px'
+                }}>MC</span>
+                MeshCore ({meshCoreNodes.length})
+              </div>
+              {meshCoreNodes.map(mcNode => {
+                const hasPosition = mcNode.latitude && mcNode.longitude;
+                const advTypeName = mcNode.advType === 1 ? 'Companion' : mcNode.advType === 2 ? 'Repeater' : mcNode.advType === 3 ? 'Router' : '';
+                return (
+                  <div
+                    key={`mc-${mcNode.publicKey}`}
+                    className={`node-item meshcore-node ${selectedNodeId === `mc-${mcNode.publicKey}` ? 'selected' : ''}`}
+                    onClick={() => {
+                      if (hasPosition) {
+                        setMapCenterTarget([mcNode.latitude, mcNode.longitude]);
+                      }
+                      setSelectedNodeId(`mc-${mcNode.publicKey}`);
+                    }}
+                    style={{ borderLeft: '3px solid #9333ea' }}
+                  >
+                    <div className="node-header">
+                      <div className="node-name">
+                        <span style={{
+                          background: '#9333ea',
+                          color: 'white',
+                          padding: '1px 4px',
+                          borderRadius: '3px',
+                          fontSize: '9px',
+                          marginRight: '6px'
+                        }}>MC</span>
+                        <div className="node-name-text">
+                          <div className="node-longname">
+                            {mcNode.name || 'MeshCore Node'}
+                          </div>
+                          {advTypeName && (
+                            <div className="node-role" title="MeshCore device type">{advTypeName}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="node-actions">
+                        <div className="node-short" style={{ color: '#9333ea' }}>
+                          {mcNode.publicKey.substring(0, 4)}...
+                        </div>
+                      </div>
+                    </div>
+                    <div className="node-details">
+                      <div className="node-stats">
+                        {mcNode.snr !== undefined && (
+                          <span className="stat" title="SNR">
+                            📶 {mcNode.snr.toFixed(1)}dB
+                          </span>
+                        )}
+                        {mcNode.rssi !== undefined && (
+                          <span className="stat" title="RSSI">
+                            📡 {mcNode.rssi}dBm
+                          </span>
+                        )}
+                      </div>
+                      <div className="node-time">
+                        {mcNode.lastSeen ? (() => {
+                          const date = new Date(mcNode.lastSeen);
+                          return isToday(date)
+                            ? formatTime(date, timeFormat)
+                            : formatDateTime(date, timeFormat, dateFormat);
+                        })() : '-'}
+                      </div>
+                    </div>
+                    <div className="node-indicators">
+                      {hasPosition && (
+                        <div className="node-location" title="Has GPS location">
+                          📍
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {/* Meshtastic nodes section */}
           {shouldShowData() ? (() => {
             // Find the home node for distance calculations (use unfiltered nodes to ensure home node is found)
             const homeNode = nodes.find(n => n.user?.id === currentNodeId);
@@ -1183,6 +1287,7 @@ const NodesTabComponent: React.FC<NodesTabProps> = ({
 
             return sortedNodes.length > 0 ? (
               <>
+              {/* Meshtastic nodes */}
               {sortedNodes.map(node => (
                 <div
                   key={node.nodeNum}
@@ -1321,9 +1426,12 @@ const NodesTabComponent: React.FC<NodesTabProps> = ({
               </div>
             );
           })() : (
-            <div className="no-data">
-              Connect to Meshtastic node
-            </div>
+            // Only show "Connect to Meshtastic node" if there are also no MeshCore nodes
+            !(showMeshCoreNodes && meshCoreNodes.length > 0) && (
+              <div className="no-data">
+                Connect to Meshtastic node
+              </div>
+            )
           )}
         </div>
         )}
