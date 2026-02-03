@@ -1686,8 +1686,9 @@ class MeshtasticManager {
         MESHTASTIC_PORT: String(config.tcpPort),
       };
 
-      if (node?.longName) scriptEnv.NODE_LONG_NAME = node.longName;
-      if (node?.shortName) scriptEnv.NODE_SHORT_NAME = node.shortName;
+      // Sanitize node names - they come from external mesh network
+      if (node?.longName) scriptEnv.NODE_LONG_NAME = this.sanitizeEnvValue(node.longName, 200);
+      if (node?.shortName) scriptEnv.NODE_SHORT_NAME = this.sanitizeEnvValue(node.shortName, 100);
 
       // Add MeshMonitor node location
       const localNodeInfo = this.getLocalNodeInfo();
@@ -1818,8 +1819,9 @@ class MeshtasticManager {
     result = result.replace(/{NODE_LON}/g, String(lng));
     result = result.replace(/{NODE_ID}/g, nodeId);
     result = result.replace(/{NODE_NUM}/g, String(nodeNum));
-    result = result.replace(/{LONG_NAME}/g, node?.longName || nodeId);
-    result = result.replace(/{SHORT_NAME}/g, node?.shortName || nodeId);
+    // Sanitize node names - they come from external mesh network and may be used in script args
+    result = result.replace(/{LONG_NAME}/g, this.sanitizeEnvValue(node?.longName, 200) || nodeId);
+    result = result.replace(/{SHORT_NAME}/g, this.sanitizeEnvValue(node?.shortName, 100) || nodeId);
     result = result.replace(/{DISTANCE_TO_CENTER}/g, dist.toFixed(2));
     result = result.replace(/{EVENT}/g, eventType);
     result = result.replace(/{IP}/g, config.nodeIp);
@@ -7808,7 +7810,8 @@ class MeshtasticManager {
     const config = this.getConfig();
     const scriptEnv: Record<string, string> = {
       ...process.env as Record<string, string>,
-      MESSAGE: message.text,
+      // Sanitize message text - comes from external mesh network
+      MESSAGE: this.sanitizeEnvValue(message.text),
       FROM_NODE: String(message.fromNodeNum),
       PACKET_ID: packetId !== undefined ? String(packetId) : '',
       TRIGGER: Array.isArray(trigger.trigger) ? trigger.trigger.join(', ') : trigger.trigger,
@@ -7820,14 +7823,14 @@ class MeshtasticManager {
     // Add sender node information environment variables
     const fromNode = databaseService.getNode(message.fromNodeNum);
     if (fromNode) {
-      // Add node names (Issue #1099)
+      // Add node names (Issue #1099) - sanitize as they come from mesh network
       if (fromNode.shortName) {
-        scriptEnv.FROM_SHORT_NAME = fromNode.shortName;
+        scriptEnv.FROM_SHORT_NAME = this.sanitizeEnvValue(fromNode.shortName, 100);
       }
       if (fromNode.longName) {
-        scriptEnv.FROM_LONG_NAME = fromNode.longName;
+        scriptEnv.FROM_LONG_NAME = this.sanitizeEnvValue(fromNode.longName, 200);
       }
-      // Add location (FROM_LAT, FROM_LON)
+      // Add location (FROM_LAT, FROM_LON) - numeric values are safe
       if (fromNode.latitude != null && fromNode.longitude != null) {
         scriptEnv.FROM_LAT = String(fromNode.latitude);
         scriptEnv.FROM_LON = String(fromNode.longitude);
@@ -7845,13 +7848,17 @@ class MeshtasticManager {
     }
 
     // Add all message data as MSG_* environment variables
+    // Sanitize string values as they may come from external mesh network
     Object.entries(message).forEach(([key, value]) => {
-      scriptEnv[`MSG_${key}`] = String(value);
+      const strValue = String(value);
+      // Sanitize string-type message fields (text, etc.) but not numeric IDs
+      scriptEnv[`MSG_${key}`] = typeof value === 'string' ? this.sanitizeEnvValue(strValue) : strValue;
     });
 
     // Add extracted parameters as PARAM_* environment variables
+    // These are extracted from message text, so sanitize them
     Object.entries(extractedParams).forEach(([key, value]) => {
-      scriptEnv[`PARAM_${key}`] = value;
+      scriptEnv[`PARAM_${key}`] = this.sanitizeEnvValue(value);
     });
 
     return scriptEnv;
@@ -7994,6 +8001,37 @@ class MeshtasticManager {
     }
 
     return truncated;
+  }
+
+  /**
+   * Sanitize a value for safe use in environment variables.
+   * Removes characters that could cause issues in shell scripts or environment parsing.
+   * @param value The value to sanitize
+   * @param maxLength Maximum length (default 1000 chars)
+   * @returns Sanitized string safe for environment variables
+   */
+  private sanitizeEnvValue(value: string | undefined | null, maxLength: number = 1000): string {
+    if (value == null) return '';
+
+    let sanitized = String(value)
+      // Remove null bytes (can terminate strings early)
+      .replace(/\0/g, '')
+      // Remove newlines and carriage returns (can break env var parsing)
+      .replace(/[\r\n]/g, ' ')
+      // Remove backslash sequences that could be interpreted
+      .replace(/\\/g, '/')
+      // Remove shell metacharacters that could cause issues even in quoted contexts
+      .replace(/[`$]/g, '')
+      // Collapse multiple spaces
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // Truncate to max length
+    if (sanitized.length > maxLength) {
+      sanitized = sanitized.substring(0, maxLength);
+    }
+
+    return sanitized;
   }
 
   private async checkAutoWelcome(nodeNum: number, nodeId: string): Promise<void> {
@@ -8412,17 +8450,17 @@ class MeshtasticManager {
       result = result.replace(/{NODE_ID}/g, nodeId);
     }
 
-    // {LONG_NAME} - Sender node long name
+    // {LONG_NAME} - Sender node long name (sanitized - comes from external mesh network)
     if (result.includes('{LONG_NAME}')) {
       const node = databaseService.getNode(fromNum);
-      const longName = node?.longName || 'Unknown';
+      const longName = this.sanitizeEnvValue(node?.longName, 200) || 'Unknown';
       result = result.replace(/{LONG_NAME}/g, longName);
     }
 
-    // {SHORT_NAME} - Sender node short name
+    // {SHORT_NAME} - Sender node short name (sanitized - comes from external mesh network)
     if (result.includes('{SHORT_NAME}')) {
       const node = databaseService.getNode(fromNum);
-      const shortName = node?.shortName || '????';
+      const shortName = this.sanitizeEnvValue(node?.shortName, 100) || '????';
       result = result.replace(/{SHORT_NAME}/g, shortName);
     }
 
