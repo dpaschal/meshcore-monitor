@@ -1341,7 +1341,7 @@ const NodesTabComponent: React.FC<NodesTabProps> = ({
         className={`map-container ${showPacketMonitor && canViewPacketMonitor ? 'with-packet-monitor' : ''}`}
         style={showPacketMonitor && canViewPacketMonitor ? { height: `calc(100% - ${packetMonitorHeight}px)` } : undefined}
       >
-        {shouldShowData() ? (
+        {(shouldShowData() || meshCoreNodes.length > 0) ? (
           <>
             <div
               ref={mapControlsRef}
@@ -1976,7 +1976,7 @@ const NodesTabComponent: React.FC<NodesTabProps> = ({
             selectedTilesetId={activeTileset}
             onTilesetChange={setMapTileset}
           />
-          {nodesWithPosition.length === 0 && (
+          {nodesWithPosition.length === 0 && meshCoreNodes.filter(n => n.latitude && n.longitude).length === 0 && (
             <div className="map-overlay">
               <div className="overlay-content">
                 <h3>📍 No Node Locations</h3>
@@ -1990,7 +1990,7 @@ const NodesTabComponent: React.FC<NodesTabProps> = ({
           <div className="map-placeholder">
             <div className="placeholder-content">
               <h3>Map View</h3>
-              <p>Connect to a Meshtastic node to view node locations on the map</p>
+              <p>Connect to a Meshtastic or MeshCore device to view node locations on the map</p>
             </div>
           </div>
         )}

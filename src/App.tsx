@@ -597,11 +597,46 @@ function App() {
 
     const fetchMeshcoreContacts = async () => {
       try {
-        const response = await fetch(`${baseUrl}/api/meshcore/contacts`);
-        const data = await response.json();
-        if (data.success && Array.isArray(data.data)) {
-          // Filter contacts with valid positions and map to MeshCoreMapNode format
-          const nodesWithPosition = data.data
+        // Fetch both status (for local node) and contacts
+        const [statusResponse, contactsResponse] = await Promise.all([
+          fetch(`${baseUrl}/api/meshcore/status`),
+          fetch(`${baseUrl}/api/meshcore/contacts`)
+        ]);
+
+        const statusData = await statusResponse.json();
+        const contactsData = await contactsResponse.json();
+
+        const allNodes: Array<{
+          publicKey: string;
+          name: string;
+          latitude: number;
+          longitude: number;
+          rssi?: number;
+          snr?: number;
+          lastSeen?: number;
+          advType?: number;
+          isLocal?: boolean;
+        }> = [];
+
+        // Add local node if it has valid coordinates
+        if (statusData.success && statusData.data?.localNode) {
+          const localNode = statusData.data.localNode;
+          if (localNode.latitude && localNode.longitude &&
+              localNode.latitude !== 0 && localNode.longitude !== 0) {
+            allNodes.push({
+              publicKey: localNode.publicKey || 'local',
+              name: localNode.name || 'Local Node',
+              latitude: localNode.latitude,
+              longitude: localNode.longitude,
+              advType: localNode.advType,
+              isLocal: true,
+            });
+          }
+        }
+
+        // Add contacts with valid positions
+        if (contactsData.success && Array.isArray(contactsData.data)) {
+          const contactNodes = contactsData.data
             .filter((contact: { latitude?: number; longitude?: number }) =>
               contact.latitude && contact.longitude &&
               contact.latitude !== 0 && contact.longitude !== 0
@@ -616,8 +651,10 @@ function App() {
               lastSeen: contact.lastSeen,
               advType: contact.advType,
             }));
-          setMeshCoreNodes(nodesWithPosition);
+          allNodes.push(...contactNodes);
         }
+
+        setMeshCoreNodes(allNodes);
       } catch (err) {
         // Silently fail - MeshCore may not be available
       }

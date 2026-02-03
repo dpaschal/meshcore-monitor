@@ -406,6 +406,7 @@ class MeshCoreManager extends EventEmitter {
     // Allow only valid serial port patterns
     const validPatterns = [
       /^\/dev\/tty[A-Za-z0-9]+$/,      // Linux: /dev/ttyUSB0, /dev/ttyACM0
+      /^\/dev\/[a-zA-Z][a-zA-Z0-9_-]*$/,  // Linux symlinks: /dev/wio-meshcore, /dev/techo-meshtastic
       /^\/dev\/cu\.[A-Za-z0-9_-]+$/,   // macOS: /dev/cu.usbmodem*
       /^COM\d+$/i,                      // Windows: COM1, COM2, etc.
       /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+$/, // TCP: IP:port
@@ -471,6 +472,9 @@ asyncio.run(main())
       try {
         const serialPort = this.sanitizeSerialPort(this.config?.serialPort || '');
         const info = await this.executePythonCommand(script, { serial_port: serialPort });
+        // Extract latitude/longitude, filtering out 0,0 (no GPS)
+        const lat = info.adv_lat && info.adv_lat !== 0 ? info.adv_lat : undefined;
+        const lon = info.adv_lon && info.adv_lon !== 0 ? info.adv_lon : undefined;
         this.localNode = {
           publicKey: info.public_key || '',
           name: info.name || 'Unknown',
@@ -481,6 +485,8 @@ asyncio.run(main())
           radioBw: info.radio_bw,
           radioSf: info.radio_sf,
           radioCr: info.radio_cr,
+          latitude: lat,
+          longitude: lon,
         };
       } catch (error) {
         logger.error('[MeshCore] Failed to get companion info:', error);
@@ -514,16 +520,21 @@ async def main():
     await mc.commands.get_contacts()
     contacts = []
     for key, contact in mc.contacts.items():
-        # Try to get position data if available
-        lat = contact.get('latitude') or contact.get('lat')
-        lon = contact.get('longitude') or contact.get('lon') or contact.get('lng')
+        # Try to get position data - MeshCore uses adv_lat/adv_lon
+        lat = contact.get('adv_lat') or contact.get('latitude') or contact.get('lat')
+        lon = contact.get('adv_lon') or contact.get('longitude') or contact.get('lon')
+        # Filter out 0,0 positions (no GPS data)
+        if lat == 0.0:
+            lat = None
+        if lon == 0.0:
+            lon = None
         contacts.append({
             'public_key': key,
             'adv_name': contact.get('adv_name', ''),
             'name': contact.get('name', ''),
             'rssi': contact.get('rssi'),
             'snr': contact.get('snr'),
-            'adv_type': contact.get('adv_type'),
+            'adv_type': contact.get('type'),
             'latitude': lat,
             'longitude': lon,
         })
