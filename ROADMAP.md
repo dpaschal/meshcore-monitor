@@ -21,11 +21,11 @@ MeshCore uses:
 ### 1.1 Connection Layer
 **File:** `src/server/meshcoreManager.ts` (new, replaces meshtasticManager.ts)
 
-- [ ] Serial port connection (for local USB devices)
-- [ ] TCP socket connection (for remote/network devices)
-- [ ] Connection state management
-- [ ] Reconnection handling
-- [ ] Event-based message handling
+- [x] Serial port connection (for local USB devices)
+- [x] TCP socket connection (for remote/network devices)
+- [x] Connection state management
+- [x] Reconnection handling
+- [x] Event-based message handling
 
 **MeshCore Connection Methods:**
 ```typescript
@@ -51,10 +51,10 @@ MeshCore has two firmware types with different protocols:
 - Commands: `set name`, `get radio`, `ver`, `advert`, etc.
 - Limited API compared to Companion
 
-- [ ] Implement binary protocol parser
-- [ ] Implement text CLI handler
-- [ ] Auto-detect firmware type
-- [ ] Command/response mapping
+- [x] Implement binary protocol parser (via Python meshcore library)
+- [x] Implement text CLI handler (for Repeater firmware)
+- [x] Auto-detect firmware type
+- [x] Command/response mapping
 
 ### 1.3 Database Schema Updates
 **Files:** `src/db/schema/*.ts`
@@ -98,38 +98,38 @@ CREATE TABLE contacts (
 );
 ```
 
-- [ ] Create new schema files
+- [x] Create new schema files (meshcoreNodes.ts, meshcoreMessages.ts)
 - [ ] Migration from old schema
 - [ ] Update repository classes
 
 ## Phase 2: Feature Implementation
 
 ### 2.1 Node Discovery & Display
-- [ ] Connect to local MeshCore device
-- [ ] Receive and parse advert messages
-- [ ] Store nodes in database
-- [ ] Display node list in UI
-- [ ] Show node details (name, type, battery, etc.)
+- [x] Connect to local MeshCore device
+- [x] Receive and parse advert messages
+- [ ] Store nodes in database (schema ready, persistence pending)
+- [x] Display node list in UI
+- [x] Show node details (name, type, battery, etc.)
 
 ### 2.2 Contact Management
-- [ ] Fetch contacts from connected device
-- [ ] Display contact list
-- [ ] Show contact status (last seen, RSSI, SNR)
-- [ ] Refresh contacts on demand
+- [x] Fetch contacts from connected device
+- [x] Display contact list
+- [x] Show contact status (last seen, RSSI, SNR)
+- [x] Refresh contacts on demand
 
 ### 2.3 Messaging
-- [ ] Send text messages
-- [ ] Receive incoming messages
-- [ ] Message history display
-- [ ] Broadcast vs direct messages
+- [x] Send text messages
+- [x] Receive incoming messages
+- [x] Message history display
+- [x] Broadcast vs direct messages
 
 ### 2.4 Admin Commands
 MeshCore supports remote administration:
 
-- [ ] Login to remote node (password-based)
-- [ ] Request status from remote node
+- [x] Login to remote node (password-based)
+- [x] Request status from remote node
 - [ ] Configure remote node settings
-- [ ] Request remote advert
+- [x] Request remote advert
 
 ```typescript
 // Admin workflow
@@ -140,11 +140,11 @@ const status = await mc.commands.req_status_sync(publicKey, timeout=10);
 ### 2.5 Repeater Management
 For Repeater firmware devices:
 
-- [ ] Configure name
-- [ ] Configure radio settings (freq, BW, SF, CR)
+- [x] Configure name
+- [x] Configure radio settings (freq, BW, SF, CR)
 - [ ] Set admin password
-- [ ] Trigger advert
-- [ ] View status
+- [x] Trigger advert
+- [x] View status
 
 ## Phase 3: UI Adaptation
 
@@ -155,10 +155,10 @@ For Repeater firmware devices:
 - "Hardware Model" → "Firmware Type" (Companion/Repeater/RoomServer)
 
 ### 3.2 Component Updates
-- [ ] NodeList component - show MeshCore fields
-- [ ] NodeDetails component - MeshCore-specific info
-- [ ] MessageList component - adapt for MeshCore messages
-- [ ] Settings component - MeshCore connection settings
+- [x] NodeList component - show MeshCore fields (MeshCoreTab.tsx)
+- [x] NodeDetails component - MeshCore-specific info (MeshCoreTab.tsx)
+- [x] MessageList component - adapt for MeshCore messages (MeshCoreTab.tsx)
+- [x] Settings component - MeshCore connection settings (MeshCoreTab.tsx)
 
 ### 3.3 Map View
 - [ ] Display nodes with positions
