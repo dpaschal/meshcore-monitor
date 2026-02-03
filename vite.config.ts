@@ -12,9 +12,9 @@ export default defineConfig({
       filename: 'sw.ts',
       includeAssets: ['favicon.ico', 'logo.png', 'favicon-16x16.png', 'favicon-32x32.png'],
       manifest: {
-        name: 'MeshMonitor',
-        short_name: 'MeshMonitor',
-        description: 'Meshtastic Node Monitoring',
+        name: 'MeshCore Monitor',
+        short_name: 'MeshCore',
+        description: 'MeshCore Network Monitoring',
         theme_color: '#1a1a1a',
         background_color: '#1a1a1a',
         display: 'standalone',
