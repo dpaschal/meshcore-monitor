@@ -42,9 +42,12 @@ A comprehensive web application for monitoring **both Meshtastic and MeshCore** 
 ### Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/dpaschal/meshcore-monitor.git
+# Clone the repository with submodules (required for Meshtastic support)
+git clone --recurse-submodules https://github.com/dpaschal/meshcore-monitor.git
 cd meshcore-monitor
+
+# If you already cloned without submodules, run:
+git submodule update --init --recursive
 
 # Install dependencies
 npm install
@@ -59,6 +62,8 @@ npm run build:server
 # Start
 npm start
 ```
+
+> **Note:** The `protobufs` submodule contains Meshtastic protocol definitions. If you only plan to use MeshCore, you can skip the submodule and set `SKIP_MESHTASTIC=true`.
 
 ### Configuration
 

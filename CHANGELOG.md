@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [1.0.2] - 2026-02-03 (MeshCore Monitor)
+
+### Fixed
+- **Meshtastic Protobufs** - Documented submodule requirement for Meshtastic support
+- **Dual Protocol Support** - Both Meshtastic and MeshCore now work out of the box
+- **Installation Instructions** - Added `--recurse-submodules` to clone command
+
+---
+
 ## [1.0.1] - 2026-02-03 (MeshCore Monitor)
 
 ### Added - MeshCore Protocol Support
