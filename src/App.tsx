@@ -139,6 +139,10 @@ function App() {
   const [selectedRouteSegment, setSelectedRouteSegment] = useState<{ nodeNum1: number; nodeNum2: number } | null>(null);
   const [emojiPickerMessage, setEmojiPickerMessage] = useState<MeshMessage | null>(null);
 
+  // MeshCore connection status
+  const [meshcoreConnected, setMeshcoreConnected] = useState(false);
+  const [meshcoreNodeName, setMeshcoreNodeName] = useState<string | null>(null);
+
   // Check if mobile viewport and default to collapsed on mobile
   const isMobileViewport = () => window.innerWidth <= 768;
   const [isMessagesNodeListCollapsed, setIsMessagesNodeListCollapsed] = useState(isMobileViewport());
@@ -574,6 +578,29 @@ function App() {
       setActiveTab('nodes');
     }
   }, [activeTab, authStatus, authLoading, hasPermission, setActiveTab]);
+
+  // Poll MeshCore status when on meshcore tab
+  useEffect(() => {
+    const fetchMeshcoreStatus = async () => {
+      try {
+        const response = await fetch(`${baseUrl}/api/meshcore/status`);
+        const data = await response.json();
+        if (data.success) {
+          setMeshcoreConnected(data.data?.connected || false);
+          setMeshcoreNodeName(data.data?.localNode?.name || null);
+        }
+      } catch (err) {
+        // Silently fail - MeshCore may not be available
+      }
+    };
+
+    // Initial fetch
+    fetchMeshcoreStatus();
+
+    // Poll every 5 seconds when on meshcore tab
+    const interval = setInterval(fetchMeshcoreStatus, 5000);
+    return () => clearInterval(interval);
+  }, [baseUrl]);
 
   // Helper function to safely parse node IDs to node numbers
   const parseNodeId = useCallback((nodeId: string): number => {
@@ -4033,6 +4060,9 @@ function App() {
         onShowLoginModal={() => setShowLoginModal(true)}
         onLogout={() => setActiveTab('nodes')}
         onNodeClick={handleNodeClick}
+        activeTab={activeTab}
+        meshcoreConnected={meshcoreConnected}
+        meshcoreNodeName={meshcoreNodeName}
       />
 
       <AppBanners

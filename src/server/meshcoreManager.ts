@@ -537,7 +537,7 @@ async def main():
     cx = SerialConnection('${this.config?.serialPort}', baudrate=115200)
     mc = MeshCore(cx)
     await mc.connect()
-    ${toPublicKey ? `await mc.commands.send_text('${toPublicKey}', '${text.replace(/'/g, "\\'")}')` : `await mc.commands.send_broadcast('${text.replace(/'/g, "\\'")}')`}
+    ${toPublicKey ? `await mc.commands.send_msg('${toPublicKey}', '${text.replace(/'/g, "\\'")}')` : `await mc.commands.send_chan_msg(0, '${text.replace(/'/g, "\\'")}')`}
     await mc.disconnect()
     print('OK')
 
@@ -547,6 +547,18 @@ asyncio.run(main())
     try {
       await this.executePythonCommand(script);
       logger.info(`[MeshCore] Message sent: ${text.substring(0, 50)}...`);
+
+      // Store the sent message
+      const sentMessage: MeshCoreMessage = {
+        id: `sent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        fromPublicKey: this.localNode?.publicKey || 'local',
+        toPublicKey: toPublicKey || undefined,
+        text: text,
+        timestamp: Date.now(),
+      };
+      this.messages.push(sentMessage);
+      this.emit('message', sentMessage);
+
       return true;
     } catch (error) {
       logger.error('[MeshCore] Failed to send message:', error);

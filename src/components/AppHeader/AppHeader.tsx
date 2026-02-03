@@ -27,6 +27,9 @@ interface AppHeaderProps {
   onShowLoginModal: () => void;
   onLogout: () => void;
   onNodeClick?: () => void;
+  activeTab?: string;
+  meshcoreConnected?: boolean;
+  meshcoreNodeName?: string | null;
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
@@ -45,10 +48,21 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onShowLoginModal,
   onLogout,
   onNodeClick,
+  activeTab,
+  meshcoreConnected,
+  meshcoreNodeName,
 }) => {
   const { t } = useTranslation();
 
   const getConnectionStatusText = () => {
+    // Show MeshCore status when on meshcore tab
+    if (activeTab === 'meshcore') {
+      if (meshcoreConnected) {
+        return meshcoreNodeName ? `Connected to ${meshcoreNodeName}` : 'Connected';
+      }
+      return 'Disconnected';
+    }
+
     switch (connectionStatus) {
       case 'user-disconnected':
         return t('header.status.disconnected');
@@ -63,6 +77,14 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       default:
         return connectionStatus;
     }
+  };
+
+  // Get the effective connection status for styling
+  const getEffectiveConnectionStatus = () => {
+    if (activeTab === 'meshcore') {
+      return meshcoreConnected ? 'connected' : 'disconnected';
+    }
+    return connectionStatus === 'user-disconnected' ? 'disconnected' : connectionStatus;
   };
 
   const renderNodeInfo = () => {
@@ -116,9 +138,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             title={`${t('header.clickForStatus')} | ${t('header.updateMethod')}: ${webSocketConnected ? 'WebSocket' : t('header.polling')}`}
           >
             <span
-              className={`status-indicator ${
-                connectionStatus === 'user-disconnected' ? 'disconnected' : connectionStatus
-              }`}
+              className={`status-indicator ${getEffectiveConnectionStatus()}`}
             ></span>
             <span>{getConnectionStatusText()}</span>
             <span

@@ -90,7 +90,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const NavItem: React.FC<{
     id: TabType;
     label: string;
-    icon: string;
+    icon: React.ReactNode;
     onClick?: () => void;
     showNotification?: boolean;
   }> = ({ id, label, icon, onClick, showNotification }) => {
@@ -187,7 +187,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           {hasPermission('configuration', 'read') && (
             <NavItem id="configuration" label={t('nav.device')} icon="📡" />
           )}
-          <NavItem id="meshcore" label="MeshCore" icon="🔗" />
+          <NavItem id="meshcore" label="MeshCore" icon={<img src={`${baseUrl}/logo.png`} alt="" style={{ width: '20px', height: '20px' }} />} />
           {isAuthenticated && (
             <NavItem id="notifications" label={t('nav.notifications')} icon="🔔" />
           )}

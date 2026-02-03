@@ -10,6 +10,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useCsrfFetch } from '../../hooks/useCsrfFetch';
 import './MeshCoreTab.css';
 
 // Types
@@ -76,6 +77,11 @@ export const MeshCoreTab: React.FC = () => {
   const [messages, setMessages] = useState<MeshCoreMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Track mount for debugging
+  useEffect(() => {
+    console.log('MeshCoreTab mounted');
+    return () => console.log('MeshCoreTab unmounted');
+  }, []);
 
   // Connection form state
   const [connectionType, setConnectionType] = useState<'serial' | 'tcp'>('serial');
@@ -92,10 +98,13 @@ export const MeshCoreTab: React.FC = () => {
   const [adminPassword, setAdminPassword] = useState('');
   const [adminStatus, setAdminStatus] = useState<any>(null);
 
+  // CSRF-protected fetch
+  const csrfFetch = useCsrfFetch();
+
   // Fetch status
   const fetchStatus = useCallback(async () => {
     try {
-      const response = await fetch('/api/meshcore/status');
+      const response = await csrfFetch('/api/meshcore/status');
       const data = await response.json();
       if (data.success) {
         setStatus(data.data);
@@ -108,7 +117,7 @@ export const MeshCoreTab: React.FC = () => {
   // Fetch nodes
   const fetchNodes = useCallback(async () => {
     try {
-      const response = await fetch('/api/meshcore/nodes');
+      const response = await csrfFetch('/api/meshcore/nodes');
       const data = await response.json();
       if (data.success) {
         setNodes(data.data);
@@ -121,7 +130,7 @@ export const MeshCoreTab: React.FC = () => {
   // Fetch contacts
   const fetchContacts = useCallback(async () => {
     try {
-      const response = await fetch('/api/meshcore/contacts');
+      const response = await csrfFetch('/api/meshcore/contacts');
       const data = await response.json();
       if (data.success) {
         setContacts(data.data);
@@ -134,7 +143,7 @@ export const MeshCoreTab: React.FC = () => {
   // Fetch messages
   const fetchMessages = useCallback(async () => {
     try {
-      const response = await fetch('/api/meshcore/messages?limit=50');
+      const response = await csrfFetch('/api/meshcore/messages?limit=50');
       const data = await response.json();
       if (data.success) {
         setMessages(data.data);
@@ -163,7 +172,7 @@ export const MeshCoreTab: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/meshcore/connect', {
+      const response = await csrfFetch('/api/meshcore/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -192,7 +201,7 @@ export const MeshCoreTab: React.FC = () => {
   const handleDisconnect = async () => {
     setLoading(true);
     try {
-      await fetch('/api/meshcore/disconnect', { method: 'POST' });
+      await csrfFetch('/api/meshcore/disconnect', { method: 'POST' });
       await fetchStatus();
       setNodes([]);
       setContacts([]);
@@ -207,7 +216,7 @@ export const MeshCoreTab: React.FC = () => {
   // Send advert handler
   const handleSendAdvert = async () => {
     try {
-      const response = await fetch('/api/meshcore/advert', { method: 'POST' });
+      const response = await csrfFetch('/api/meshcore/advert', { method: 'POST' });
       const data = await response.json();
       if (!data.success) {
         setError(data.error || 'Failed to send advert');
@@ -221,7 +230,7 @@ export const MeshCoreTab: React.FC = () => {
   const handleRefreshContacts = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/meshcore/contacts/refresh', { method: 'POST' });
+      const response = await csrfFetch('/api/meshcore/contacts/refresh', { method: 'POST' });
       const data = await response.json();
       if (data.success) {
         setContacts(data.data);
@@ -238,7 +247,7 @@ export const MeshCoreTab: React.FC = () => {
     if (!messageText.trim()) return;
 
     try {
-      const response = await fetch('/api/meshcore/messages/send', {
+      const response = await csrfFetch('/api/meshcore/messages/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -263,7 +272,7 @@ export const MeshCoreTab: React.FC = () => {
     if (!adminPublicKey || !adminPassword) return;
 
     try {
-      const response = await fetch('/api/meshcore/admin/login', {
+      const response = await csrfFetch('/api/meshcore/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,131 +1,144 @@
 # MeshCore Monitor
 
 [![Sync with Upstream](https://github.com/dpaschal/meshcore-monitor/actions/workflows/sync-upstream.yml/badge.svg)](https://github.com/dpaschal/meshcore-monitor/actions/workflows/sync-upstream.yml)
+[![Security Scan](https://github.com/dpaschal/meshcore-monitor/actions/workflows/security-scan.yml/badge.svg)](https://github.com/dpaschal/meshcore-monitor/actions/workflows/security-scan.yml)
 [![Upstream](https://img.shields.io/badge/upstream-Yeraze%2Fmeshmonitor-blue)](https://github.com/Yeraze/meshmonitor)
+[![License](https://img.shields.io/badge/license-BSD--3--Clause-green)](LICENSE)
 
-A comprehensive web application for monitoring MeshCore mesh networks. Forked from [MeshMonitor](https://github.com/Yeraze/meshmonitor) (BSD-3-Clause) and adapted for the MeshCore protocol.
+A comprehensive web application for monitoring **both Meshtastic and MeshCore** mesh networks.
 
-**Status:** Early Development - Community Contributions Welcome!
+**Forked from [MeshMonitor](https://github.com/Yeraze/meshmonitor) by Yeraze** (BSD-3-Clause) with added MeshCore protocol support.
 
-> **Upstream Sync:** This fork automatically syncs with [Yeraze/meshmonitor](https://github.com/Yeraze/meshmonitor) daily to incorporate upstream improvements. See [sync status](.github/SYNC_STATUS.md) for details.
+> **This project extends MeshMonitor to support MeshCore devices while maintaining full Meshtastic compatibility.** We're grateful to Yeraze for creating the excellent MeshMonitor foundation.
 
-## About
+## Features
 
-MeshCore Monitor aims to provide a web-based monitoring interface for [MeshCore](https://github.com/meshcore-dev/MeshCore) mesh networks, similar to what MeshMonitor provides for Meshtastic.
+### Meshtastic Support (from upstream MeshMonitor)
+- Real-time node monitoring with map visualization
+- Channel management and messaging
+- Telemetry tracking (battery, GPS, environment)
+- Admin commands and device configuration
+- Multi-user authentication with role-based permissions
+- SQLite/PostgreSQL/MySQL database support
+- WebSocket real-time updates
+- Mobile-responsive UI
 
-### What is MeshCore?
+### MeshCore Support (added in this fork)
+- **MeshCore device connection** via serial or TCP
+- **Node discovery** - see all MeshCore nodes on your mesh
+- **Contact management** - discover and manage contacts
+- **Messaging** - send broadcast or direct messages
+- **Advert sending** - announce presence on the mesh
+- **Remote admin** - login and manage remote nodes (coming soon)
+- **Dual-protocol support** - monitor both networks from one interface
 
-MeshCore is a lightweight, hybrid routing mesh protocol for packet radios. Unlike Meshtastic, MeshCore focuses on:
-- Lightweight multi-hop packet routing
-- Simpler protocol design
-- Optimized for embedded systems
-- MIT licensed (fully open source)
+## Quick Start
 
-## Project Status
+### Prerequisites
+- Node.js 18+
+- Python 3.8+ with `meshcore` library (for MeshCore support)
+- A Meshtastic and/or MeshCore device
 
-This project is a **work in progress**. We're adapting the excellent MeshMonitor codebase to work with MeshCore's different protocol.
-
-### Key Differences from MeshMonitor
-
-| Feature | MeshMonitor (Meshtastic) | MeshCore Monitor |
-|---------|--------------------------|------------------|
-| Protocol | Protobuf over HTTP/BLE | Binary protocol (Companion) / Text CLI (Repeater) |
-| Node IDs | 32-bit nodeNum | Public keys (hex) |
-| Connection | HTTP API to node | Serial/TCP to device |
-| Channels | PSK-based channels | Different channel model |
-
-### Roadmap
-
-See [ROADMAP.md](ROADMAP.md) for the development plan.
-
-**Phase 1 - Core Adaptation:**
-- [ ] Replace MeshtasticManager with MeshCoreManager
-- [ ] Update database schema for MeshCore fields
-- [ ] Implement serial/TCP connection layer
-- [ ] Basic node discovery and display
-
-**Phase 2 - Features:**
-- [ ] Message sending/receiving
-- [ ] Admin commands (login, status, etc.)
-- [ ] Repeater management
-- [ ] Contact list display
-
-**Phase 3 - Polish:**
-- [ ] UI updates for MeshCore terminology
-- [ ] Documentation
-- [ ] Docker images
-- [ ] Testing
-
-## Quick Start (Development)
+### Installation
 
 ```bash
-# Clone the repo
+# Clone the repository
 git clone https://github.com/dpaschal/meshcore-monitor.git
 cd meshcore-monitor
 
 # Install dependencies
 npm install
 
-# Configure environment
-cp .env.example .env
-# Edit .env - set MESHCORE_SERIAL_PORT or MESHCORE_TCP_HOST
+# Install MeshCore Python library (for MeshCore support)
+pip install meshcore
 
-# Start development servers
-npm run dev:full
+# Build
+npm run build
+npm run build:server
+
+# Start
+npm start
 ```
 
-## Technology Stack
+### Configuration
 
-**Frontend:**
-- React 19 with TypeScript
-- Vite 7 (build tool)
-- CSS3 with Catppuccin theme
+**Environment Variables:**
 
-**Backend:**
-- Node.js with Express 5
-- TypeScript
-- better-sqlite3 (SQLite driver)
-- meshcore Python library (via child process) or native serial
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | 3000 | Server port |
+| `SKIP_MESHTASTIC` | false | Skip Meshtastic initialization |
+| `ALLOWED_ORIGINS` | - | CORS allowed origins |
+| `DATABASE_URL` | SQLite | Database connection string |
+
+### Connecting Devices
+
+**Meshtastic:**
+1. Go to Settings tab
+2. Configure serial port or TCP connection
+3. Nodes will appear in the Nodes tab
+
+**MeshCore:**
+1. Go to MeshCore tab (chain icon in sidebar)
+2. Enter serial port (e.g., `/dev/ttyACM0` or `COM3`)
+3. Click Connect
+4. Send an Advert to discover other nodes
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    MeshCore Monitor                      │
+├─────────────────────────────────────────────────────────┤
+│  React Frontend                                          │
+│  ├── Nodes/Channels/Messages tabs (Meshtastic)          │
+│  └── MeshCore tab (MeshCore devices)                    │
+├─────────────────────────────────────────────────────────┤
+│  Express Backend                                         │
+│  ├── MeshtasticManager (protobuf protocol)              │
+│  └── MeshCoreManager (binary/text protocol via Python)  │
+├─────────────────────────────────────────────────────────┤
+│  Database (SQLite/PostgreSQL/MySQL)                      │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Upstream Sync
+
+This fork automatically syncs with [Yeraze/meshmonitor](https://github.com/Yeraze/meshmonitor) daily to incorporate upstream improvements. Our MeshCore additions are maintained separately and merged with upstream changes.
+
+See [.github/SYNC_STATUS.md](.github/SYNC_STATUS.md) for sync details.
 
 ## Contributing
 
-This is a community project! Contributions are welcome:
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a Pull Request
+### Development
 
-**Areas that need help:**
-- MeshCore protocol expertise
-- Serial/binary protocol handling in Node.js
-- Testing with real MeshCore devices
-- Documentation
+```bash
+# Run in development mode
+npm run dev:full
 
-## License
+# Run tests
+npm test
 
-This project is licensed under the BSD-3-Clause License - see the [LICENSE](LICENSE) file for details.
-
-### Attribution
-
-This project is a fork of [MeshMonitor](https://github.com/Yeraze/meshmonitor) by Yeraze, licensed under BSD-3-Clause. Original copyright and license terms are preserved.
-
-## Links
-
-- [MeshCore GitHub](https://github.com/meshcore-dev/MeshCore) - The MeshCore firmware
-- [MeshCore Python Library](https://pypi.org/project/meshcore/) - Python library for MeshCore
-- [Original MeshMonitor](https://github.com/Yeraze/meshmonitor) - The project this is forked from
-- [MeshCore Flasher](https://flasher.meshcore.co.uk/) - Flash MeshCore firmware
+# Type checking
+npm run typecheck
+```
 
 ## Acknowledgments
 
-- [Yeraze](https://github.com/Yeraze) - Original MeshMonitor author
-- [MeshCore Team](https://github.com/meshcore-dev) - MeshCore firmware
-- [Catppuccin](https://catppuccin.com/) - Soothing pastel theme
-- [React](https://reactjs.org/) - Frontend framework
+- **[Yeraze](https://github.com/Yeraze)** - Creator of MeshMonitor, the foundation for this project
+- **[Meshtastic](https://meshtastic.org)** - Open source mesh networking
+- **[MeshCore](https://github.com/rmendes76/MeshCore)** - Lightweight mesh protocol
 
----
+## License
 
-**MeshCore Monitor** - Monitor your MeshCore mesh, beautifully.
+BSD-3-Clause License - See [LICENSE](LICENSE)
 
-_Free and open source for the community._
+This project is a fork of [MeshMonitor](https://github.com/Yeraze/meshmonitor) which is also BSD-3-Clause licensed.
+
+## Contact
+
+- **Issues:** [GitHub Issues](https://github.com/dpaschal/meshcore-monitor/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/dpaschal/meshcore-monitor/discussions)
+- **Upstream:** [Yeraze/meshmonitor](https://github.com/Yeraze/meshmonitor)

@@ -1,8 +1,51 @@
 # Changelog
 
-All notable changes to MeshMonitor will be documented in this file.
+All notable changes to MeshCore Monitor will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+> **Note:** This project is a fork of [MeshMonitor](https://github.com/Yeraze/meshmonitor). MeshCore-specific changes are listed below, followed by upstream MeshMonitor changes.
+
+---
+
+## [1.0.0] - 2026-02-03 (MeshCore Monitor)
+
+### Added - MeshCore Protocol Support
+This release adds full MeshCore protocol support while maintaining complete Meshtastic compatibility.
+
+#### MeshCore Features
+- **MeshCore Tab** - Dedicated tab for MeshCore device management
+- **Device Connection** - Connect to MeshCore devices via serial port or TCP
+- **Node Discovery** - View all MeshCore nodes on your mesh network
+- **Contact Management** - Discover and manage MeshCore contacts
+- **Messaging** - Send broadcast or direct messages to MeshCore devices
+- **Advert Sending** - Announce presence on the MeshCore mesh
+- **Message Display** - View sent and received messages in real-time
+
+#### UI Improvements
+- **MeshCore Logo** - Custom icon in sidebar for MeshCore tab
+- **Context-Aware Status** - Header shows MeshCore connection status when on MeshCore tab
+- **Rebranding** - Updated branding to "MeshCore Monitor"
+
+#### Infrastructure
+- **Dual Protocol Support** - Monitor both Meshtastic and MeshCore from one interface
+- **Python Integration** - Uses `meshcore` Python library for device communication
+- **Upstream Sync** - Automated daily sync with Yeraze/meshmonitor
+- **Security Scanning** - GitHub Actions workflow for security audits
+- **CSRF Protection** - Secure API calls with CSRF tokens
+
+### Technical Details
+- MeshCore connection via `meshcore` Python library
+- Serial and TCP transport support
+- Companion firmware uses binary protocol
+- Repeater firmware uses text CLI protocol
+- MeshCoreManager handles all device communication
+
+---
+
+## Upstream MeshMonitor Changelog
+
+The following entries are from the upstream [MeshMonitor](https://github.com/Yeraze/meshmonitor) project.
 
 ## [Unreleased]
 

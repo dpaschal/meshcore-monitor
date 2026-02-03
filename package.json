@@ -1,7 +1,7 @@
 {
   "name": "meshcore-monitor",
-  "version": "0.1.0",
-  "description": "Web application for monitoring MeshCore mesh networks",
+  "version": "1.0.0",
+  "description": "Web application for monitoring Meshtastic and MeshCore mesh networks",
   "license": "BSD-3-Clause",
   "private": true,
   "type": "module",
