@@ -16,7 +16,6 @@ import { EventEmitter } from 'events';
 import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline';
 import { logger } from '../utils/logger.js';
-import { getEnvironmentConfig } from './config/environment.js';
 
 // MeshCore device types
 export enum MeshCoreDeviceType {
