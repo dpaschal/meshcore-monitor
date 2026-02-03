@@ -1,8 +1,8 @@
 # Upstream Sync Status
 
-**Status:** ✅ In Sync
+**Status:** ⚠️ Conflict
 
-This fork automatically syncs with the upstream MeshMonitor repository.
+Merge conflict detected. Manual intervention required.
 
 ## Details
 
@@ -11,7 +11,8 @@ This fork automatically syncs with the upstream MeshMonitor repository.
 | **Upstream Repo** | [Yeraze/meshmonitor](https://github.com/Yeraze/meshmonitor) |
 | **Upstream Version** | v3.4.4 |
 | **Fork Version** | v3.4.3 |
-| **Last Check** | 2026-02-03 (Initial) |
+| **Last Check** | 2026-02-03 04:20:26 UTC |
+| **Upstream Commit** | `f0e5623917bcb0d61a36fe20b0d7b301b2ee7158` |
 
 ## About This Fork
 
