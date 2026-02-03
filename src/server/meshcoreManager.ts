@@ -355,8 +355,9 @@ class MeshCoreManager extends EventEmitter {
 
   /**
    * Execute a Python meshcore command for Companion devices
+   * SECURITY: Data is passed via stdin as JSON to prevent command injection
    */
-  private async executePythonCommand(script: string): Promise<any> {
+  private async executePythonCommand(script: string, inputData?: Record<string, unknown>): Promise<any> {
     return new Promise((resolve, reject) => {
       const python = spawn('python3', ['-c', script]);
       let stdout = '';
@@ -386,7 +387,33 @@ class MeshCoreManager extends EventEmitter {
       python.on('error', (err) => {
         reject(err);
       });
+
+      // SECURITY: Pass data via stdin as JSON instead of string interpolation
+      if (inputData) {
+        python.stdin.write(JSON.stringify(inputData));
+        python.stdin.end();
+      }
     });
+  }
+
+  /**
+   * Validate and sanitize serial port path
+   * SECURITY: Prevent path traversal and injection
+   */
+  private sanitizeSerialPort(port: string): string {
+    // Allow only valid serial port patterns
+    const validPatterns = [
+      /^\/dev\/tty[A-Za-z0-9]+$/,      // Linux: /dev/ttyUSB0, /dev/ttyACM0
+      /^\/dev\/cu\.[A-Za-z0-9_-]+$/,   // macOS: /dev/cu.usbmodem*
+      /^COM\d+$/i,                      // Windows: COM1, COM2, etc.
+      /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+$/, // TCP: IP:port
+    ];
+
+    const isValid = validPatterns.some(pattern => pattern.test(port));
+    if (!isValid) {
+      throw new Error(`Invalid serial port format: ${port}`);
+    }
+    return port;
   }
 
   /**
@@ -421,13 +448,16 @@ class MeshCoreManager extends EventEmitter {
       }
     } else {
       // Use Python for Companion
+      // SECURITY: Serial port passed via stdin to prevent injection
       const script = `
 import asyncio
 import json
+import sys
 from meshcore import MeshCore, SerialConnection
 
 async def main():
-    cx = SerialConnection('${this.config?.serialPort}', baudrate=115200)
+    input_data = json.loads(sys.stdin.read())
+    cx = SerialConnection(input_data['serial_port'], baudrate=115200)
     mc = MeshCore(cx)
     await mc.connect()
     info = mc.self_info
@@ -437,7 +467,8 @@ async def main():
 asyncio.run(main())
 `;
       try {
-        const info = await this.executePythonCommand(script);
+        const serialPort = this.sanitizeSerialPort(this.config?.serialPort || '');
+        const info = await this.executePythonCommand(script, { serial_port: serialPort });
         this.localNode = {
           publicKey: info.public_key || '',
           name: info.name || 'Unknown',
@@ -466,13 +497,16 @@ asyncio.run(main())
       return this.contacts;
     }
 
+    // SECURITY: Serial port passed via stdin to prevent injection
     const script = `
 import asyncio
 import json
+import sys
 from meshcore import MeshCore, SerialConnection
 
 async def main():
-    cx = SerialConnection('${this.config?.serialPort}', baudrate=115200)
+    input_data = json.loads(sys.stdin.read())
+    cx = SerialConnection(input_data['serial_port'], baudrate=115200)
     mc = MeshCore(cx)
     await mc.connect()
     await mc.commands.get_contacts()
@@ -493,7 +527,8 @@ asyncio.run(main())
 `;
 
     try {
-      const contactsList = await this.executePythonCommand(script);
+      const serialPort = this.sanitizeSerialPort(this.config?.serialPort || '');
+      const contactsList = await this.executePythonCommand(script, { serial_port: serialPort });
       this.contacts.clear();
       for (const c of contactsList) {
         this.contacts.set(c.public_key, {
@@ -529,15 +564,22 @@ asyncio.run(main())
       return false;
     }
 
+    // SECURITY: All user input passed via stdin as JSON to prevent command injection
     const script = `
 import asyncio
+import json
+import sys
 from meshcore import MeshCore, SerialConnection
 
 async def main():
-    cx = SerialConnection('${this.config?.serialPort}', baudrate=115200)
+    input_data = json.loads(sys.stdin.read())
+    cx = SerialConnection(input_data['serial_port'], baudrate=115200)
     mc = MeshCore(cx)
     await mc.connect()
-    ${toPublicKey ? `await mc.commands.send_msg('${toPublicKey}', '${text.replace(/'/g, "\\'")}')` : `await mc.commands.send_chan_msg(0, '${text.replace(/'/g, "\\'")}')`}
+    if input_data.get('to_public_key'):
+        await mc.commands.send_msg(input_data['to_public_key'], input_data['text'])
+    else:
+        await mc.commands.send_chan_msg(0, input_data['text'])
     await mc.disconnect()
     print('OK')
 
@@ -545,7 +587,12 @@ asyncio.run(main())
 `;
 
     try {
-      await this.executePythonCommand(script);
+      const serialPort = this.sanitizeSerialPort(this.config?.serialPort || '');
+      await this.executePythonCommand(script, {
+        serial_port: serialPort,
+        text: text,
+        to_public_key: toPublicKey || null,
+      });
       logger.info(`[MeshCore] Message sent: ${text.substring(0, 50)}...`);
 
       // Store the sent message
@@ -584,12 +631,16 @@ asyncio.run(main())
         return false;
       }
     } else {
+      // SECURITY: Serial port passed via stdin to prevent injection
       const script = `
 import asyncio
+import json
+import sys
 from meshcore import MeshCore, SerialConnection
 
 async def main():
-    cx = SerialConnection('${this.config?.serialPort}', baudrate=115200)
+    input_data = json.loads(sys.stdin.read())
+    cx = SerialConnection(input_data['serial_port'], baudrate=115200)
     mc = MeshCore(cx)
     await mc.connect()
     await mc.commands.send_advert()
@@ -599,7 +650,8 @@ async def main():
 asyncio.run(main())
 `;
       try {
-        await this.executePythonCommand(script);
+        const serialPort = this.sanitizeSerialPort(this.config?.serialPort || '');
+        await this.executePythonCommand(script, { serial_port: serialPort });
         logger.info('[MeshCore] Advert sent (Companion)');
         return true;
       } catch (error) {
@@ -618,15 +670,19 @@ asyncio.run(main())
       return false;
     }
 
+    // SECURITY: All user input passed via stdin as JSON to prevent command injection
     const script = `
 import asyncio
+import json
+import sys
 from meshcore import MeshCore, SerialConnection
 
 async def main():
-    cx = SerialConnection('${this.config?.serialPort}', baudrate=115200)
+    input_data = json.loads(sys.stdin.read())
+    cx = SerialConnection(input_data['serial_port'], baudrate=115200)
     mc = MeshCore(cx)
     await mc.connect()
-    await mc.commands.send_login('${publicKey}', '${password}')
+    await mc.commands.send_login(input_data['public_key'], input_data['password'])
     await mc.disconnect()
     print('OK')
 
@@ -634,7 +690,12 @@ asyncio.run(main())
 `;
 
     try {
-      await this.executePythonCommand(script);
+      const serialPort = this.sanitizeSerialPort(this.config?.serialPort || '');
+      await this.executePythonCommand(script, {
+        serial_port: serialPort,
+        public_key: publicKey,
+        password: password,
+      });
       logger.info(`[MeshCore] Logged into node ${publicKey.substring(0, 8)}...`);
       return true;
     } catch (error) {
@@ -651,16 +712,19 @@ asyncio.run(main())
       return null;
     }
 
+    // SECURITY: All user input passed via stdin as JSON to prevent command injection
     const script = `
 import asyncio
 import json
+import sys
 from meshcore import MeshCore, SerialConnection
 
 async def main():
-    cx = SerialConnection('${this.config?.serialPort}', baudrate=115200)
+    input_data = json.loads(sys.stdin.read())
+    cx = SerialConnection(input_data['serial_port'], baudrate=115200)
     mc = MeshCore(cx)
     await mc.connect()
-    status = await mc.commands.req_status_sync('${publicKey}', timeout=10)
+    status = await mc.commands.req_status_sync(input_data['public_key'], timeout=10)
     await mc.disconnect()
     print(json.dumps(status if status else {}))
 
@@ -668,7 +732,11 @@ asyncio.run(main())
 `;
 
     try {
-      const status = await this.executePythonCommand(script);
+      const serialPort = this.sanitizeSerialPort(this.config?.serialPort || '');
+      const status = await this.executePythonCommand(script, {
+        serial_port: serialPort,
+        public_key: publicKey,
+      });
       return {
         batteryMv: status.bat_mv,
         uptimeSecs: status.up_secs,
@@ -685,14 +753,29 @@ asyncio.run(main())
   }
 
   /**
+   * Sanitize name input to prevent injection
+   * SECURITY: Only allow alphanumeric, spaces, hyphens, underscores
+   */
+  private sanitizeName(name: string): string {
+    const sanitized = name.replace(/[^a-zA-Z0-9\s\-_]/g, '').substring(0, 32);
+    if (sanitized.length === 0) {
+      throw new Error('Invalid name: must contain alphanumeric characters');
+    }
+    return sanitized;
+  }
+
+  /**
    * Set device name (Repeater only via CLI)
    */
   async setName(name: string): Promise<boolean> {
+    // SECURITY: Sanitize name to prevent injection
+    const safeName = this.sanitizeName(name);
+
     if (this.deviceType === MeshCoreDeviceType.REPEATER) {
       try {
-        await this.sendRepeaterCommand(`set name ${name}`);
+        await this.sendRepeaterCommand(`set name ${safeName}`);
         if (this.localNode) {
-          this.localNode.name = name;
+          this.localNode.name = safeName;
         }
         return true;
       } catch (error) {
@@ -700,24 +783,32 @@ asyncio.run(main())
         return false;
       }
     } else {
+      // SECURITY: All user input passed via stdin as JSON to prevent command injection
       const script = `
 import asyncio
+import json
+import sys
 from meshcore import MeshCore, SerialConnection
 
 async def main():
-    cx = SerialConnection('${this.config?.serialPort}', baudrate=115200)
+    input_data = json.loads(sys.stdin.read())
+    cx = SerialConnection(input_data['serial_port'], baudrate=115200)
     mc = MeshCore(cx)
     await mc.connect()
-    await mc.commands.set_name('${name}')
+    await mc.commands.set_name(input_data['name'])
     await mc.disconnect()
     print('OK')
 
 asyncio.run(main())
 `;
       try {
-        await this.executePythonCommand(script);
+        const serialPort = this.sanitizeSerialPort(this.config?.serialPort || '');
+        await this.executePythonCommand(script, {
+          serial_port: serialPort,
+          name: safeName,
+        });
         if (this.localNode) {
-          this.localNode.name = name;
+          this.localNode.name = safeName;
         }
         return true;
       } catch (error) {
@@ -728,11 +819,34 @@ asyncio.run(main())
   }
 
   /**
+   * Validate radio parameters
+   * SECURITY: Ensure numeric values are within valid ranges
+   */
+  private validateRadioParams(freq: number, bw: number, sf: number, cr: number): void {
+    if (!Number.isFinite(freq) || freq < 100 || freq > 1000) {
+      throw new Error('Invalid frequency: must be between 100-1000 MHz');
+    }
+    if (!Number.isFinite(bw) || bw < 0 || bw > 1000) {
+      throw new Error('Invalid bandwidth');
+    }
+    if (!Number.isInteger(sf) || sf < 5 || sf > 12) {
+      throw new Error('Invalid spreading factor: must be 5-12');
+    }
+    if (!Number.isInteger(cr) || cr < 5 || cr > 8) {
+      throw new Error('Invalid coding rate: must be 5-8');
+    }
+  }
+
+  /**
    * Set radio parameters
    */
   async setRadio(freq: number, bw: number, sf: number, cr: number): Promise<boolean> {
+    // SECURITY: Validate numeric parameters
+    this.validateRadioParams(freq, bw, sf, cr);
+
     if (this.deviceType === MeshCoreDeviceType.REPEATER) {
       try {
+        // Safe: validated numbers only
         await this.sendRepeaterCommand(`set radio ${freq},${bw},${sf},${cr}`);
         return true;
       } catch (error) {
@@ -740,22 +854,33 @@ asyncio.run(main())
         return false;
       }
     } else {
+      // SECURITY: All parameters passed via stdin as JSON
       const script = `
 import asyncio
+import json
+import sys
 from meshcore import MeshCore, SerialConnection
 
 async def main():
-    cx = SerialConnection('${this.config?.serialPort}', baudrate=115200)
+    input_data = json.loads(sys.stdin.read())
+    cx = SerialConnection(input_data['serial_port'], baudrate=115200)
     mc = MeshCore(cx)
     await mc.connect()
-    await mc.commands.set_radio(${freq}, ${bw}, ${sf}, ${cr})
+    await mc.commands.set_radio(input_data['freq'], input_data['bw'], input_data['sf'], input_data['cr'])
     await mc.disconnect()
     print('OK')
 
 asyncio.run(main())
 `;
       try {
-        await this.executePythonCommand(script);
+        const serialPort = this.sanitizeSerialPort(this.config?.serialPort || '');
+        await this.executePythonCommand(script, {
+          serial_port: serialPort,
+          freq: freq,
+          bw: bw,
+          sf: sf,
+          cr: cr,
+        });
         return true;
       } catch (error) {
         logger.error('[MeshCore] Failed to set radio:', error);
