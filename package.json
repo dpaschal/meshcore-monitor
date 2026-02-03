@@ -1,6 +1,6 @@
 {
   "name": "meshcore-monitor",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Web application for monitoring Meshtastic and MeshCore mesh networks",
   "license": "BSD-3-Clause",
   "private": true,
@@ -9,7 +9,7 @@
     "dev": "vite",
     "dev:server": "tsx --watch src/server/server.ts",
     "dev:full": "concurrently \"npm run dev\" \"npm run dev:server\"",
-    "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 tsc && vite build",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 tsc && cross-env NODE_OPTIONS=--max-old-space-size=4096 vite build",
     "build:server": "cross-env NODE_OPTIONS=--max-old-space-size=4096 tsc --project tsconfig.server.json && mkdir -p dist/server/routes/v1 && cp src/server/routes/v1/openapi.yaml dist/server/routes/v1/",
     "start": "node --max-old-space-size=4096 dist/server/server.js",
     "preview": "vite preview",
