@@ -187,6 +187,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           {hasPermission('configuration', 'read') && (
             <NavItem id="configuration" label={t('nav.device')} icon="📡" />
           )}
+          <NavItem id="meshcore" label="MeshCore" icon="🔗" />
           {isAuthenticated && (
             <NavItem id="notifications" label={t('nav.notifications')} icon="🔔" />
           )}

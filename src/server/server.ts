@@ -636,6 +636,7 @@ import apiTokenRoutes from './routes/apiTokenRoutes.js';
 import channelDatabaseRoutes from './routes/channelDatabaseRoutes.js';
 import newsRoutes from './routes/newsRoutes.js';
 import v1Router from './routes/v1/index.js';
+import meshcoreRoutes from './routes/meshcoreRoutes.js';
 
 // CSRF token endpoint (must be before CSRF protection middleware)
 apiRouter.get('/csrf-token', csrfTokenEndpoint);
@@ -709,6 +710,9 @@ apiRouter.use('/upgrade', upgradeRoutes);
 
 // Message routes (requires appropriate write permissions)
 apiRouter.use('/messages', optionalAuth(), messageRoutes);
+
+// MeshCore routes (for MeshCore device monitoring)
+apiRouter.use('/meshcore', optionalAuth(), meshcoreRoutes);
 
 // Link preview routes
 apiRouter.use('/', linkPreviewRoutes);

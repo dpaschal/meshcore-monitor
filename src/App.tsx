@@ -77,6 +77,7 @@ const pendingFavoriteRequests = new Map<number, boolean>();
 const pendingIgnoredRequests = new Map<number, boolean>();
 import TracerouteHistoryModal from './components/TracerouteHistoryModal';
 import RouteSegmentTraceroutesModal from './components/RouteSegmentTraceroutesModal';
+import { MeshCoreTab } from './components/MeshCore';
 
 // Fix for default markers in React-Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -4559,6 +4560,7 @@ function App() {
         {activeTab === 'security' && (
           <SecurityTab onTabChange={setActiveTab} onSelectDMNode={setSelectedDMNode} setNewMessage={setNewMessage} />
         )}
+        {activeTab === 'meshcore' && <MeshCoreTab />}
       </main>
 
       {/* Node Popup */}
