@@ -136,6 +136,18 @@ npm run typecheck
 - **[Meshtastic](https://meshtastic.org)** - Open source mesh networking
 - **[MeshCore](https://github.com/rmendes76/MeshCore)** - Lightweight mesh protocol
 
+## Support Development
+
+Want to help improve MeshCore Monitor? Your support helps cover Claude Code API costs and keeps this project actively developed!
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow?style=for-the-badge&logo=buy-me-a-coffee)](https://buymeacoffee.com/dpaschal)
+
+**Ways to contribute:**
+- [Buy me a coffee](https://buymeacoffee.com/dpaschal) - Fund more development time
+- [Report issues](https://github.com/dpaschal/meshcore-monitor/issues) - Help us find bugs
+- [Submit PRs](https://github.com/dpaschal/meshcore-monitor/pulls) - Contribute code
+- [Join NC Mesh](https://discord.gg/ncmesh) - Join our community
+
 ## License
 
 BSD-3-Clause License - See [LICENSE](LICENSE)
