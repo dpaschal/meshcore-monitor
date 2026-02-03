@@ -310,6 +310,7 @@ function App() {
     setPositionHistory,
     selectedNodeId,
     setSelectedNodeId,
+    setMeshCoreNodes,
   } = useMapContext();
 
   // Data context
@@ -579,7 +580,7 @@ function App() {
     }
   }, [activeTab, authStatus, authLoading, hasPermission, setActiveTab]);
 
-  // Poll MeshCore status when on meshcore tab
+  // Poll MeshCore status and fetch contacts for map display
   useEffect(() => {
     const fetchMeshcoreStatus = async () => {
       try {
@@ -594,13 +595,45 @@ function App() {
       }
     };
 
+    const fetchMeshcoreContacts = async () => {
+      try {
+        const response = await fetch(`${baseUrl}/api/meshcore/contacts`);
+        const data = await response.json();
+        if (data.success && Array.isArray(data.data)) {
+          // Filter contacts with valid positions and map to MeshCoreMapNode format
+          const nodesWithPosition = data.data
+            .filter((contact: { latitude?: number; longitude?: number }) =>
+              contact.latitude && contact.longitude &&
+              contact.latitude !== 0 && contact.longitude !== 0
+            )
+            .map((contact: { publicKey: string; advName?: string; name?: string; latitude: number; longitude: number; rssi?: number; snr?: number; lastSeen?: number; advType?: number }) => ({
+              publicKey: contact.publicKey,
+              name: contact.advName || contact.name || 'MeshCore Node',
+              latitude: contact.latitude,
+              longitude: contact.longitude,
+              rssi: contact.rssi,
+              snr: contact.snr,
+              lastSeen: contact.lastSeen,
+              advType: contact.advType,
+            }));
+          setMeshCoreNodes(nodesWithPosition);
+        }
+      } catch (err) {
+        // Silently fail - MeshCore may not be available
+      }
+    };
+
     // Initial fetch
     fetchMeshcoreStatus();
+    fetchMeshcoreContacts();
 
-    // Poll every 5 seconds when on meshcore tab
-    const interval = setInterval(fetchMeshcoreStatus, 5000);
+    // Poll every 5 seconds
+    const interval = setInterval(() => {
+      fetchMeshcoreStatus();
+      fetchMeshcoreContacts();
+    }, 5000);
     return () => clearInterval(interval);
-  }, [baseUrl]);
+  }, [baseUrl, setMeshCoreNodes]);
 
   // Helper function to safely parse node IDs to node numbers
   const parseNodeId = useCallback((nodeId: string): number => {

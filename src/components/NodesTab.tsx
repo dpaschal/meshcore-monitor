@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MapContainer, TileLayer, Marker, Popup, Tooltip, Polyline, Circle, Rectangle, useMap } from 'react-leaflet';
+import L from 'leaflet';
 import type { Marker as LeafletMarker } from 'leaflet';
 import { DeviceInfo } from '../types/device';
 import { TabType } from '../types/ui';
@@ -204,6 +205,9 @@ const NodesTabComponent: React.FC<NodesTabProps> = ({
     setShowMotion,
     showMqttNodes,
     setShowMqttNodes,
+    showMeshCoreNodes,
+    setShowMeshCoreNodes,
+    meshCoreNodes,
     showAnimations,
     setShowAnimations,
     showEstimatedPositions,
@@ -1419,6 +1423,14 @@ const NodesTabComponent: React.FC<NodesTabProps> = ({
                   <label className="map-control-item">
                     <input
                       type="checkbox"
+                      checked={showMeshCoreNodes}
+                      onChange={(e) => setShowMeshCoreNodes(e.target.checked)}
+                    />
+                    <span>Show MeshCore</span>
+                  </label>
+                  <label className="map-control-item">
+                    <input
+                      type="checkbox"
                       checked={showMotion}
                       onChange={(e) => setShowMotion(e.target.checked)}
                     />
@@ -1623,6 +1635,79 @@ const NodesTabComponent: React.FC<NodesTabProps> = ({
               </Marker>
                 );
               })}
+
+              {/* MeshCore nodes */}
+              {showMeshCoreNodes && meshCoreNodes
+                .filter(node => node.latitude && node.longitude)
+                .map(node => {
+                  const position: [number, number] = [node.latitude, node.longitude];
+                  // Use a distinct purple/magenta color for MeshCore nodes
+                  const meshCoreIcon = L.divIcon({
+                    className: 'meshcore-marker',
+                    html: `
+                      <div style="
+                        width: 24px;
+                        height: 24px;
+                        background: #9333ea;
+                        border: 2px solid white;
+                        border-radius: 50%;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: white;
+                        font-size: 10px;
+                        font-weight: bold;
+                      ">MC</div>
+                      <div style="
+                        position: absolute;
+                        top: -20px;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        background: rgba(147, 51, 234, 0.9);
+                        color: white;
+                        padding: 2px 6px;
+                        border-radius: 3px;
+                        font-size: 11px;
+                        white-space: nowrap;
+                      ">${node.name || 'MeshCore'}</div>
+                    `,
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12],
+                  });
+
+                  return (
+                    <Marker
+                      key={`meshcore-${node.publicKey}`}
+                      position={position}
+                      icon={meshCoreIcon}
+                    >
+                      <Tooltip>
+                        <strong>{node.name || 'MeshCore Node'}</strong>
+                        <br />
+                        <small>MeshCore Device</small>
+                        {node.rssi !== undefined && <><br />RSSI: {node.rssi} dBm</>}
+                        {node.snr !== undefined && <><br />SNR: {node.snr} dB</>}
+                      </Tooltip>
+                      <Popup>
+                        <div style={{ minWidth: '200px' }}>
+                          <h3 style={{ margin: '0 0 8px 0', color: '#9333ea' }}>
+                            {node.name || 'MeshCore Node'}
+                          </h3>
+                          <div style={{ fontSize: '12px', color: '#666' }}>
+                            <strong>Type:</strong> MeshCore Device<br />
+                            <strong>Public Key:</strong> {node.publicKey.substring(0, 16)}...<br />
+                            {node.latitude && <><strong>Latitude:</strong> {node.latitude.toFixed(6)}<br /></>}
+                            {node.longitude && <><strong>Longitude:</strong> {node.longitude.toFixed(6)}<br /></>}
+                            {node.rssi !== undefined && <><strong>RSSI:</strong> {node.rssi} dBm<br /></>}
+                            {node.snr !== undefined && <><strong>SNR:</strong> {node.snr} dB<br /></>}
+                            {node.lastSeen && <><strong>Last Seen:</strong> {new Date(node.lastSeen).toLocaleString()}<br /></>}
+                          </div>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  );
+                })}
 
               {/* Draw uncertainty circles for estimated positions */}
               {showEstimatedPositions && nodesWithPosition

@@ -38,6 +38,8 @@ interface MeshCoreContact {
   rssi?: number;
   snr?: number;
   advType?: number;
+  latitude?: number;
+  longitude?: number;
 }
 
 interface MeshCoreMessage {

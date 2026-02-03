@@ -66,6 +66,8 @@ export interface MeshCoreContact {
   rssi?: number;
   snr?: number;
   advType?: MeshCoreDeviceType;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface MeshCoreMessage {
@@ -512,6 +514,9 @@ async def main():
     await mc.commands.get_contacts()
     contacts = []
     for key, contact in mc.contacts.items():
+        # Try to get position data if available
+        lat = contact.get('latitude') or contact.get('lat')
+        lon = contact.get('longitude') or contact.get('lon') or contact.get('lng')
         contacts.append({
             'public_key': key,
             'adv_name': contact.get('adv_name', ''),
@@ -519,6 +524,8 @@ async def main():
             'rssi': contact.get('rssi'),
             'snr': contact.get('snr'),
             'adv_type': contact.get('adv_type'),
+            'latitude': lat,
+            'longitude': lon,
         })
     await mc.disconnect()
     print(json.dumps(contacts))
@@ -538,6 +545,8 @@ asyncio.run(main())
           rssi: c.rssi,
           snr: c.snr,
           advType: c.adv_type,
+          latitude: c.latitude,
+          longitude: c.longitude,
           lastSeen: Date.now(),
         });
       }
