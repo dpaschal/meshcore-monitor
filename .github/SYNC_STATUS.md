@@ -9,10 +9,10 @@ Merge conflict detected. Manual intervention required.
 | Property | Value |
 |----------|-------|
 | **Upstream Repo** | [Yeraze/meshmonitor](https://github.com/Yeraze/meshmonitor) |
-| **Upstream Version** | v3.4.4 |
-| **Fork Version** | v1.0.2 |
-| **Last Check** | 2026-02-03 06:41:49 UTC |
-| **Upstream Commit** | `f0e5623917bcb0d61a36fe20b0d7b301b2ee7158` |
+| **Upstream Version** | v3.4.5 |
+| **Fork Version** | v1.0.6 |
+| **Last Check** | 2026-02-04 06:42:18 UTC |
+| **Upstream Commit** | `0b6ef5e3726e1a5d5967eae5a6165c8387d5c1c1` |
 
 ## About This Fork
 
