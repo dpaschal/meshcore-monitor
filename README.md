@@ -1,10 +1,27 @@
 # MeshCore Monitor
 
+<p align="center">
+  <a href="https://buymeacoffee.com/dpaschal">
+    <img src="https://img.shields.io/badge/❤️🎆_THANKS!_🎆❤️-Support_This_Project-ff0000?style=for-the-badge" alt="Thanks!" height="40">
+  </a>
+</p>
+
+<p align="center">
+  <b>☕ Buy me Claude Code credits or support a project! ☕</b>
+</p>
+
+<p align="center">
+  <a href="https://buymeacoffee.com/dpaschal">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-red.png" alt="Buy Me A Coffee" height="50">
+  </a>
+</p>
+
+---
+
 [![Sync with Upstream](https://github.com/dpaschal/meshcore-monitor/actions/workflows/sync-upstream.yml/badge.svg)](https://github.com/dpaschal/meshcore-monitor/actions/workflows/sync-upstream.yml)
 [![Security Scan](https://github.com/dpaschal/meshcore-monitor/actions/workflows/security-scan.yml/badge.svg)](https://github.com/dpaschal/meshcore-monitor/actions/workflows/security-scan.yml)
 [![Upstream](https://img.shields.io/badge/upstream-Yeraze%2Fmeshmonitor-blue)](https://github.com/Yeraze/meshmonitor)
 [![License](https://img.shields.io/badge/license-BSD--3--Clause-green)](LICENSE)
-[![Buy Me A Coffee](https://img.shields.io/badge/☕-Buy%20Me%20A%20Coffee-yellow)](https://buymeacoffee.com/dpaschal)
 
 A comprehensive web application for monitoring **both Meshtastic and MeshCore** mesh networks.
 
@@ -141,7 +158,11 @@ npm run typecheck
 
 Want to help improve MeshCore Monitor? Your support helps cover Claude Code API costs and keeps this project actively developed!
 
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow?style=for-the-badge&logo=buy-me-a-coffee)](https://buymeacoffee.com/dpaschal)
+<p align="center">
+  <a href="https://buymeacoffee.com/dpaschal">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-red.png" alt="Buy Me A Coffee" height="50">
+  </a>
+</p>
 
 **Ways to contribute:**
 - [Buy me a coffee](https://buymeacoffee.com/dpaschal) - Fund more development time
