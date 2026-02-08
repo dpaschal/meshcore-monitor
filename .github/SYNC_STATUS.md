@@ -11,8 +11,8 @@ Merge conflict detected. Manual intervention required.
 | **Upstream Repo** | [Yeraze/meshmonitor](https://github.com/Yeraze/meshmonitor) |
 | **Upstream Version** | v3.4.7 |
 | **Fork Version** | v1.0.6 |
-| **Last Check** | 2026-02-07 06:34:49 UTC |
-| **Upstream Commit** | `6763fc2ca86857814b47ccfe7d6e72e00f1ce5fd` |
+| **Last Check** | 2026-02-08 06:41:33 UTC |
+| **Upstream Commit** | `ce0ad219b706aa293968aebbe3167ceae035e457` |
 
 ## About This Fork
 
