@@ -76,6 +76,7 @@ import { migration as mfaColumnsMigration, runMigration068Postgres, runMigration
 import { migration as traceroutePositionsMigration, runMigration069Postgres, runMigration069Mysql } from '../server/migrations/069_add_traceroute_positions.js';
 import { migration as meshcoreTablesMigration, runMigration070Postgres as runMigration070MeshcorePostgres, runMigration070Mysql as runMigration070MeshcoreMysql } from '../server/migrations/070_add_meshcore_tables.js';
 import { migration as meshcorePermissionMigration, runMigration071Postgres, runMigration071Mysql } from '../server/migrations/071_add_meshcore_permission.js';
+import { migration as dmUnreadIndexMigration, runMigration072Postgres, runMigration072Mysql } from '../server/migrations/072_add_messages_dm_unread_index.js';
 import { validateThemeDefinition as validateTheme } from '../utils/themeValidation.js';
 
 // Drizzle ORM imports for dual-database support
@@ -945,6 +946,7 @@ class DatabaseService {
     this.runTraceroutePositionsMigration();
     this.runMeshcoreTablesMigration();
     this.runMeshcorePermissionMigration();
+    this.runDmUnreadIndexMigration();
     this.ensureAutomationDefaults();
     this.warmupCaches();
     this.isInitialized = true;
@@ -2352,6 +2354,25 @@ class DatabaseService {
       logger.debug('MeshCore permission migration completed successfully');
     } catch (error) {
       logger.error('Failed to run MeshCore permission migration:', error);
+      throw error;
+    }
+  }
+
+  private runDmUnreadIndexMigration(): void {
+    const migrationKey = 'migration_072_dm_unread_index';
+    try {
+      const migrationStatus = this.getSetting(migrationKey);
+      if (migrationStatus === 'completed') {
+        logger.debug('Migration 072 (DM unread index) already completed');
+        return;
+      }
+
+      logger.debug('Running migration 072: Add DM unread index...');
+      dmUnreadIndexMigration.up(this.db);
+      this.setSetting(migrationKey, 'completed');
+      logger.debug('DM unread index migration completed successfully');
+    } catch (error) {
+      logger.error('Failed to run DM unread index migration:', error);
       throw error;
     }
   }
@@ -9271,7 +9292,52 @@ class DatabaseService {
       }
     }
 
-    // MySQL not yet implemented, return empty
+    // MySQL implementation using mysqlPool
+    if (this.drizzleDbType === 'mysql' && this.mysqlPool) {
+      try {
+        let query: string;
+        let params: any[];
+
+        if (userId === null) {
+          query = `
+            SELECT m.channel, COUNT(*) as count
+            FROM messages m
+            LEFT JOIN read_messages rm ON m.id = rm.messageId
+            WHERE rm.messageId IS NULL
+              AND m.channel != -1
+              AND m.portnum = 1
+              ${localNodeId ? 'AND m.fromNodeId != ?' : ''}
+            GROUP BY m.channel
+          `;
+          params = localNodeId ? [localNodeId] : [];
+        } else {
+          query = `
+            SELECT m.channel, COUNT(*) as count
+            FROM messages m
+            LEFT JOIN read_messages rm ON m.id = rm.messageId AND rm.userId = ?
+            WHERE rm.messageId IS NULL
+              AND m.channel != -1
+              AND m.portnum = 1
+              ${localNodeId ? 'AND m.fromNodeId != ?' : ''}
+            GROUP BY m.channel
+          `;
+          params = localNodeId ? [userId, localNodeId] : [userId];
+        }
+
+        const [rows] = await this.mysqlPool.query(query, params) as any;
+        const counts: {[channelId: number]: number} = {};
+
+        for (const row of rows) {
+          counts[Number(row.channel)] = Number(row.count);
+        }
+
+        return counts;
+      } catch (error) {
+        logger.error('Error getting unread counts by channel:', error);
+        return {};
+      }
+    }
+
     return {};
   }
 
@@ -9329,8 +9395,185 @@ class DatabaseService {
       }
     }
 
-    // MySQL not yet implemented, return 0
+    // MySQL implementation using mysqlPool
+    if (this.drizzleDbType === 'mysql' && this.mysqlPool) {
+      try {
+        let query: string;
+        let params: any[];
+
+        if (userId === null) {
+          query = `
+            SELECT COUNT(*) as count
+            FROM messages m
+            LEFT JOIN read_messages rm ON m.id = rm.messageId
+            WHERE rm.messageId IS NULL
+              AND m.portnum = 1
+              AND m.channel = -1
+              AND m.fromNodeId = ?
+              AND m.toNodeId = ?
+          `;
+          params = [remoteNodeId, localNodeId];
+        } else {
+          query = `
+            SELECT COUNT(*) as count
+            FROM messages m
+            LEFT JOIN read_messages rm ON m.id = rm.messageId AND rm.userId = ?
+            WHERE rm.messageId IS NULL
+              AND m.portnum = 1
+              AND m.channel = -1
+              AND m.fromNodeId = ?
+              AND m.toNodeId = ?
+          `;
+          params = [userId, remoteNodeId, localNodeId];
+        }
+
+        const [rows] = await this.mysqlPool.query(query, params) as any;
+
+        if (rows.length > 0) {
+          return Number(rows[0].count);
+        }
+
+        return 0;
+      } catch (error) {
+        logger.error('Error getting unread DM count:', error);
+        return 0;
+      }
+    }
+
     return 0;
+  }
+
+  /**
+   * Get all DM unread counts in a single batch query, grouped by remote node.
+   * Returns { [fromNodeId: string]: number } for all nodes with unread DMs.
+   */
+  getBatchUnreadDMCounts(localNodeId: string, userId: number | null): { [fromNodeId: string]: number } {
+    // For PostgreSQL/MySQL, return empty (handled by async version)
+    if (this.drizzleDbType === 'postgres' || this.drizzleDbType === 'mysql') {
+      return {};
+    }
+
+    const stmt = this.db.prepare(`
+      SELECT m.fromNodeId, COUNT(*) as count
+      FROM messages m
+      LEFT JOIN read_messages rm ON m.id = rm.message_id AND rm.user_id ${userId === null ? 'IS NULL' : '= ?'}
+      WHERE rm.message_id IS NULL
+        AND m.portnum = 1
+        AND m.channel = -1
+        AND m.toNodeId = ?
+      GROUP BY m.fromNodeId
+    `);
+
+    const params = userId === null
+      ? [localNodeId]
+      : [userId, localNodeId];
+
+    const rows = stmt.all(...params) as { fromNodeId: string; count: number }[];
+    const result: { [fromNodeId: string]: number } = {};
+    for (const row of rows) {
+      result[row.fromNodeId] = Number(row.count);
+    }
+    return result;
+  }
+
+  /**
+   * Async version of getBatchUnreadDMCounts for PostgreSQL/MySQL support.
+   */
+  async getBatchUnreadDMCountsAsync(localNodeId: string, userId: number | null): Promise<{ [fromNodeId: string]: number }> {
+    // For SQLite, use sync version
+    if (this.drizzleDbType !== 'postgres' && this.drizzleDbType !== 'mysql') {
+      return this.getBatchUnreadDMCounts(localNodeId, userId);
+    }
+
+    // PostgreSQL implementation
+    if (this.drizzleDbType === 'postgres' && this.postgresPool) {
+      try {
+        let query: string;
+        let params: any[];
+
+        if (userId === null) {
+          query = `
+            SELECT m."fromNodeId", COUNT(*) as count
+            FROM messages m
+            LEFT JOIN read_messages rm ON m.id = rm."messageId"
+            WHERE rm."messageId" IS NULL
+              AND m.portnum = 1
+              AND m.channel = -1
+              AND m."toNodeId" = $1
+            GROUP BY m."fromNodeId"
+          `;
+          params = [localNodeId];
+        } else {
+          query = `
+            SELECT m."fromNodeId", COUNT(*) as count
+            FROM messages m
+            LEFT JOIN read_messages rm ON m.id = rm."messageId" AND rm."userId" = $1
+            WHERE rm."messageId" IS NULL
+              AND m.portnum = 1
+              AND m.channel = -1
+              AND m."toNodeId" = $2
+            GROUP BY m."fromNodeId"
+          `;
+          params = [userId, localNodeId];
+        }
+
+        const result = await this.postgresPool.query(query, params);
+        const counts: { [fromNodeId: string]: number } = {};
+        for (const row of result.rows) {
+          counts[row.fromNodeId] = Number(row.count);
+        }
+        return counts;
+      } catch (error) {
+        logger.error('Error getting batch unread DM counts:', error);
+        return {};
+      }
+    }
+
+    // MySQL implementation using mysqlPool
+    if (this.drizzleDbType === 'mysql' && this.mysqlPool) {
+      try {
+        let query: string;
+        let params: any[];
+
+        if (userId === null) {
+          query = `
+            SELECT m.fromNodeId, COUNT(*) as count
+            FROM messages m
+            LEFT JOIN read_messages rm ON m.id = rm.messageId
+            WHERE rm.messageId IS NULL
+              AND m.portnum = 1
+              AND m.channel = -1
+              AND m.toNodeId = ?
+            GROUP BY m.fromNodeId
+          `;
+          params = [localNodeId];
+        } else {
+          query = `
+            SELECT m.fromNodeId, COUNT(*) as count
+            FROM messages m
+            LEFT JOIN read_messages rm ON m.id = rm.messageId AND rm.userId = ?
+            WHERE rm.messageId IS NULL
+              AND m.portnum = 1
+              AND m.channel = -1
+              AND m.toNodeId = ?
+            GROUP BY m.fromNodeId
+          `;
+          params = [userId, localNodeId];
+        }
+
+        const [rows] = await this.mysqlPool.query(query, params) as any;
+        const counts: { [fromNodeId: string]: number } = {};
+        for (const row of rows) {
+          counts[row.fromNodeId] = Number(row.count);
+        }
+        return counts;
+      } catch (error) {
+        logger.error('Error getting batch unread DM counts:', error);
+        return {};
+      }
+    }
+
+    return {};
   }
 
   cleanupOldReadMessages(days: number): number {
@@ -9954,14 +10197,24 @@ class DatabaseService {
    * Get packet counts grouped by from_node (for distribution charts)
    * Returns top N nodes by packet count, plus counts for remainder grouped as "Other"
    */
-  async getPacketCountsByNodeAsync(options?: { since?: number; limit?: number }): Promise<DbPacketCountByNode[]> {
-    const { since, limit = 10 } = options || {};
+  async getPacketCountsByNodeAsync(options?: { since?: number; limit?: number; portnum?: number }): Promise<DbPacketCountByNode[]> {
+    const { since, limit = 10, portnum } = options || {};
 
     // For PostgreSQL
     if (this.drizzleDbType === 'postgres' && this.postgresPool) {
       try {
         const params: any[] = [];
         let paramIndex = 1;
+        const conditions: string[] = [];
+
+        if (since !== undefined) {
+          conditions.push(`pl.timestamp >= $${paramIndex++}`);
+          params.push(since);
+        }
+        if (portnum !== undefined) {
+          conditions.push(`pl.portnum = $${paramIndex++}`);
+          params.push(portnum);
+        }
 
         let query = `
           SELECT
@@ -9973,9 +10226,8 @@ class DatabaseService {
           LEFT JOIN nodes n ON pl.from_node = n."nodeNum"
         `;
 
-        if (since !== undefined) {
-          query += ` WHERE pl.timestamp >= $${paramIndex++}`;
-          params.push(since);
+        if (conditions.length > 0) {
+          query += ` WHERE ${conditions.join(' AND ')}`;
         }
 
         query += ` GROUP BY pl.from_node, n."nodeId", n."longName" ORDER BY count DESC LIMIT $${paramIndex++}`;
@@ -9998,6 +10250,16 @@ class DatabaseService {
     if (this.drizzleDbType === 'mysql' && this.mysqlPool) {
       try {
         const params: any[] = [];
+        const conditions: string[] = [];
+
+        if (since !== undefined) {
+          conditions.push(`pl.timestamp >= ?`);
+          params.push(since);
+        }
+        if (portnum !== undefined) {
+          conditions.push(`pl.portnum = ?`);
+          params.push(portnum);
+        }
 
         let query = `
           SELECT
@@ -10009,9 +10271,8 @@ class DatabaseService {
           LEFT JOIN nodes n ON pl.from_node = n.nodeNum
         `;
 
-        if (since !== undefined) {
-          query += ` WHERE pl.timestamp >= ?`;
-          params.push(since);
+        if (conditions.length > 0) {
+          query += ` WHERE ${conditions.join(' AND ')}`;
         }
 
         query += ` GROUP BY pl.from_node, n.nodeId, n.longName ORDER BY count DESC LIMIT ?`;
@@ -10032,6 +10293,18 @@ class DatabaseService {
 
     // For SQLite
     try {
+      const params: any[] = [];
+      const conditions: string[] = [];
+
+      if (since !== undefined) {
+        conditions.push(`pl.timestamp >= ?`);
+        params.push(since);
+      }
+      if (portnum !== undefined) {
+        conditions.push(`pl.portnum = ?`);
+        params.push(portnum);
+      }
+
       let query = `
         SELECT
           pl.from_node,
@@ -10042,10 +10315,8 @@ class DatabaseService {
         LEFT JOIN nodes n ON pl.from_node = n.nodeNum
       `;
 
-      const params: any[] = [];
-      if (since !== undefined) {
-        query += ` WHERE pl.timestamp >= ?`;
-        params.push(since);
+      if (conditions.length > 0) {
+        query += ` WHERE ${conditions.join(' AND ')}`;
       }
 
       query += ` GROUP BY pl.from_node ORDER BY count DESC LIMIT ?`;
@@ -10069,14 +10340,24 @@ class DatabaseService {
    * Get packet counts grouped by portnum (for distribution charts)
    * Includes port name from meshtastic constants
    */
-  async getPacketCountsByPortnumAsync(options?: { since?: number }): Promise<DbPacketCountByPortnum[]> {
-    const { since } = options || {};
+  async getPacketCountsByPortnumAsync(options?: { since?: number; from_node?: number }): Promise<DbPacketCountByPortnum[]> {
+    const { since, from_node } = options || {};
 
     // For PostgreSQL
     if (this.drizzleDbType === 'postgres' && this.postgresPool) {
       try {
         const params: any[] = [];
         let paramIndex = 1;
+        const conditions: string[] = [];
+
+        if (since !== undefined) {
+          conditions.push(`timestamp >= $${paramIndex++}`);
+          params.push(since);
+        }
+        if (from_node !== undefined) {
+          conditions.push(`from_node = $${paramIndex++}`);
+          params.push(from_node);
+        }
 
         let query = `
           SELECT
@@ -10085,9 +10366,8 @@ class DatabaseService {
           FROM packet_log
         `;
 
-        if (since !== undefined) {
-          query += ` WHERE timestamp >= $${paramIndex++}`;
-          params.push(since);
+        if (conditions.length > 0) {
+          query += ` WHERE ${conditions.join(' AND ')}`;
         }
 
         query += ` GROUP BY portnum ORDER BY count DESC`;
@@ -10108,6 +10388,16 @@ class DatabaseService {
     if (this.drizzleDbType === 'mysql' && this.mysqlPool) {
       try {
         const params: any[] = [];
+        const conditions: string[] = [];
+
+        if (since !== undefined) {
+          conditions.push(`timestamp >= ?`);
+          params.push(since);
+        }
+        if (from_node !== undefined) {
+          conditions.push(`from_node = ?`);
+          params.push(from_node);
+        }
 
         let query = `
           SELECT
@@ -10116,9 +10406,8 @@ class DatabaseService {
           FROM packet_log
         `;
 
-        if (since !== undefined) {
-          query += ` WHERE timestamp >= ?`;
-          params.push(since);
+        if (conditions.length > 0) {
+          query += ` WHERE ${conditions.join(' AND ')}`;
         }
 
         query += ` GROUP BY portnum ORDER BY count DESC`;
@@ -10137,6 +10426,18 @@ class DatabaseService {
 
     // For SQLite
     try {
+      const conditions: string[] = [];
+      const params: any[] = [];
+
+      if (since !== undefined) {
+        conditions.push(`timestamp >= ?`);
+        params.push(since);
+      }
+      if (from_node !== undefined) {
+        conditions.push(`from_node = ?`);
+        params.push(from_node);
+      }
+
       let query = `
         SELECT
           portnum,
@@ -10144,10 +10445,8 @@ class DatabaseService {
         FROM packet_log
       `;
 
-      const params: any[] = [];
-      if (since !== undefined) {
-        query += ` WHERE timestamp >= ?`;
-        params.push(since);
+      if (conditions.length > 0) {
+        query += ` WHERE ${conditions.join(' AND ')}`;
       }
 
       query += ` GROUP BY portnum ORDER BY count DESC`;
@@ -10424,6 +10723,9 @@ class DatabaseService {
       // Run migration 071: Add meshcore permission resource
       await runMigration071Postgres(client);
 
+      // Run migration 072: Add DM unread index
+      await runMigration072Postgres(client);
+
 
       // Verify all expected tables exist
       const result = await client.query(`
@@ -10549,6 +10851,9 @@ class DatabaseService {
 
       // Run migration 071: Add meshcore permission resource
       await runMigration071Mysql(pool);
+
+      // Run migration 072: Add DM unread index
+      await runMigration072Mysql(pool);
 
 
       // Verify all expected tables exist
