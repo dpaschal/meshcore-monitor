@@ -255,6 +255,22 @@ interface GeofenceTriggerConfig {
   lastError?: string;
 }
 
+interface AutoPingSession {
+  requestedBy: number;      // nodeNum of the user who requested
+  channel: number;           // channel the DM came on
+  totalPings: number;
+  completedPings: number;
+  successfulPings: number;
+  failedPings: number;
+  intervalMs: number;
+  timer: ReturnType<typeof setInterval> | null;
+  pendingRequestId: number | null;
+  pendingTimeout: ReturnType<typeof setTimeout> | null;
+  startTime: number;
+  lastPingSentAt: number;
+  results: Array<{ pingNum: number; status: 'ack' | 'nak' | 'timeout'; durationMs?: number; sentAt: number }>;
+}
+
 class MeshtasticManager {
   private transport: TcpTransport | null = null;
   private isConnected = false;
@@ -320,6 +336,9 @@ class MeshtasticManager {
   private remoteNodeDeviceMetadata: Map<number, any> = new Map();
   private favoritesSupportCache: boolean | null = null;  // Cache firmware support check result
   private cachedAutoAckRegex: { pattern: string; regex: RegExp } | null = null;  // Cached compiled regex
+
+  // Auto-ping session tracking
+  private autoPingSessions: Map<number, AutoPingSession> = new Map(); // keyed by requester nodeNum
 
   // Auto-welcome tracking to prevent race conditions
   private welcomingNodes: Set<number> = new Set();  // Track nodes currently being welcomed
@@ -491,7 +510,8 @@ class MeshtasticManager {
     nodeId: string,
     fromNum: number,
     timestamp: number,
-    packetTimestamp: number | undefined
+    packetTimestamp: number | undefined,
+    packetId?: number
   ): void {
     const now = Date.now();
     for (const metric of metricsToSave) {
@@ -504,7 +524,8 @@ class MeshtasticManager {
           value: Number(metric.value),
           unit: metric.unit,
           createdAt: now,
-          packetTimestamp
+          packetTimestamp,
+          packetId
         });
       }
     }
@@ -2347,15 +2368,19 @@ class MeshtasticManager {
       const parsed = meshtasticProtobufService.parseIncomingData(data);
 
       // Broadcast to virtual node clients if virtual node server is enabled (unless explicitly skipped).
-      // Skip broadcasting 'channel' type FromRadio messages — these should only reach clients
-      // through the controlled sendInitialConfig() flow. Broadcasting raw FromRadio.channel
-      // messages during physical node reconnection causes Android/iOS clients to receive
-      // unsolicited channel updates with empty name fields, which the Meshtastic app displays
-      // as the placeholder text "Channel Name" (fixes #1567).
+      // Skip broadcasting 'channel' and 'configComplete' type FromRadio messages — these should
+      // only reach clients through the controlled sendInitialConfig() flow.
+      // - 'channel': Broadcasting raw FromRadio.channel messages during physical node reconnection
+      //   causes Android/iOS clients to receive unsolicited channel updates with empty name fields,
+      //   which the Meshtastic app displays as placeholder text "Channel Name" (fixes #1567).
+      // - 'configComplete': Broadcasting raw configComplete during physical node reconnection or
+      //   refreshNodeDatabase() causes clients to receive an unsolicited end-of-config signal.
+      //   Since no channels preceded it (they're filtered above), the Meshtastic app interprets
+      //   this as "config done with zero channels" and clears its channel list.
       // If parsing failed, still broadcast the raw data (clients may understand it even if
       // the server can't parse it).
       const shouldBroadcast = !context?.skipVirtualNodeBroadcast &&
-        (!parsed || parsed.type !== 'channel');
+        (!parsed || (parsed.type !== 'channel' && parsed.type !== 'configComplete'));
       if (shouldBroadcast) {
         const virtualNodeServer = (global as any).virtualNodeServer;
         if (virtualNodeServer) {
@@ -3383,6 +3408,7 @@ class MeshtasticManager {
           value: messageHops,
           unit: 'hops',
           createdAt: Date.now(),
+          packetId: meshPacket.id ? Number(meshPacket.id) : undefined,
         });
 
         // Update Link Quality based on hop count comparison
@@ -3577,6 +3603,9 @@ class MeshtasticManager {
         // Auto-acknowledge matching messages
         await this.checkAutoAcknowledge(message, messageText, channelIndex, isDirectMessage, fromNum, meshPacket.id, meshPacket.rxSnr, meshPacket.rxRssi);
 
+        // Check for auto-ping DM command (before auto-responder so it takes priority)
+        if (await this.handleAutoPingCommand(message, isDirectMessage)) return;
+
         // Auto-respond to matching messages
         await this.checkAutoResponder(message, isDirectMessage, meshPacket.id);
       }
@@ -3639,6 +3668,7 @@ class MeshtasticManager {
         const timestamp = now; // Store in milliseconds (Unix timestamp in ms)
         // Preserve the original packet timestamp for analysis (may be inaccurate if node has wrong time)
         const packetTimestamp = position.time ? Number(position.time) * 1000 : undefined;
+        const packetId = meshPacket.id ? Number(meshPacket.id) : undefined;
 
         // Extract position precision metadata
         const channelIndex = meshPacket.channel !== undefined ? meshPacket.channel : 0;
@@ -3706,18 +3736,18 @@ class MeshtasticManager {
         // This ensures position history is complete regardless of precision changes
         databaseService.insertTelemetry({
           nodeId, nodeNum: fromNum, telemetryType: 'latitude',
-          timestamp, value: coords.latitude, unit: '°', createdAt: now, packetTimestamp,
+          timestamp, value: coords.latitude, unit: '°', createdAt: now, packetTimestamp, packetId,
           channel: channelIndex, precisionBits, gpsAccuracy
         });
         databaseService.insertTelemetry({
           nodeId, nodeNum: fromNum, telemetryType: 'longitude',
-          timestamp, value: coords.longitude, unit: '°', createdAt: now, packetTimestamp,
+          timestamp, value: coords.longitude, unit: '°', createdAt: now, packetTimestamp, packetId,
           channel: channelIndex, precisionBits, gpsAccuracy
         });
         if (position.altitude !== undefined && position.altitude !== null) {
           databaseService.insertTelemetry({
             nodeId, nodeNum: fromNum, telemetryType: 'altitude',
-            timestamp, value: position.altitude, unit: 'm', createdAt: now, packetTimestamp,
+            timestamp, value: position.altitude, unit: 'm', createdAt: now, packetTimestamp, packetId,
             channel: channelIndex
           });
         }
@@ -3727,7 +3757,7 @@ class MeshtasticManager {
         if (satsInView !== undefined && satsInView > 0) {
           databaseService.insertTelemetry({
             nodeId, nodeNum: fromNum, telemetryType: 'sats_in_view',
-            timestamp, value: satsInView, unit: 'sats', createdAt: now, packetTimestamp,
+            timestamp, value: satsInView, unit: 'sats', createdAt: now, packetTimestamp, packetId,
             channel: channelIndex
           });
         }
@@ -3737,7 +3767,7 @@ class MeshtasticManager {
         if (groundSpeed !== undefined && groundSpeed > 0) {
           databaseService.insertTelemetry({
             nodeId, nodeNum: fromNum, telemetryType: 'ground_speed',
-            timestamp, value: groundSpeed, unit: 'm/s', createdAt: now, packetTimestamp,
+            timestamp, value: groundSpeed, unit: 'm/s', createdAt: now, packetTimestamp, packetId,
             channel: channelIndex
           });
         }
@@ -3749,7 +3779,7 @@ class MeshtasticManager {
           const headingDegrees = groundTrack / 100;
           databaseService.insertTelemetry({
             nodeId, nodeNum: fromNum, telemetryType: 'ground_track',
-            timestamp, value: headingDegrees, unit: '°', createdAt: now, packetTimestamp,
+            timestamp, value: headingDegrees, unit: '°', createdAt: now, packetTimestamp, packetId,
             channel: channelIndex
           });
         }
@@ -3830,6 +3860,7 @@ class MeshtasticManager {
       const fromNum = Number(meshPacket.from);
       const nodeId = `!${fromNum.toString(16).padStart(8, '0')}`;
       const timestamp = Date.now();
+      const packetId = meshPacket.id ? Number(meshPacket.id) : undefined;
       // Extract channel from mesh packet - this tells us which channel the node was heard on
       const channelIndex = meshPacket.channel !== undefined ? meshPacket.channel : undefined;
       const nodeData: any = {
@@ -3923,7 +3954,8 @@ class MeshtasticManager {
             timestamp,
             value: meshPacket.rxSnr,
             unit: 'dB',
-            createdAt: timestamp
+            createdAt: timestamp,
+            packetId
           });
           const reason = !latestSnrTelemetry ? 'initial' :
                         latestSnrTelemetry.value !== meshPacket.rxSnr ? 'changed' : 'periodic';
@@ -3949,7 +3981,8 @@ class MeshtasticManager {
             timestamp,
             value: meshPacket.rxRssi,
             unit: 'dBm',
-            createdAt: timestamp
+            createdAt: timestamp,
+            packetId
           });
           const reason = !latestRssiTelemetry ? 'initial' :
                         latestRssiTelemetry.value !== meshPacket.rxRssi ? 'changed' : 'periodic';
@@ -3986,6 +4019,7 @@ class MeshtasticManager {
       const timestamp = now; // Store in milliseconds (Unix timestamp in ms)
       // Preserve the original packet timestamp for analysis (may be inaccurate if node has wrong time)
       const packetTimestamp = telemetry.time ? Number(telemetry.time) * 1000 : undefined;
+      const packetId = meshPacket.id ? Number(meshPacket.id) : undefined;
 
       // Track PKI encryption
       this.trackPKIEncryption(meshPacket, fromNum);
@@ -4020,31 +4054,31 @@ class MeshtasticManager {
         if (deviceMetrics.batteryLevel !== undefined && deviceMetrics.batteryLevel !== null && !isNaN(deviceMetrics.batteryLevel)) {
           databaseService.insertTelemetry({
             nodeId, nodeNum: fromNum, telemetryType: 'batteryLevel',
-            timestamp, value: deviceMetrics.batteryLevel, unit: '%', createdAt: now, packetTimestamp
+            timestamp, value: deviceMetrics.batteryLevel, unit: '%', createdAt: now, packetTimestamp, packetId
           });
         }
         if (deviceMetrics.voltage !== undefined && deviceMetrics.voltage !== null && !isNaN(deviceMetrics.voltage)) {
           databaseService.insertTelemetry({
             nodeId, nodeNum: fromNum, telemetryType: 'voltage',
-            timestamp, value: deviceMetrics.voltage, unit: 'V', createdAt: now, packetTimestamp
+            timestamp, value: deviceMetrics.voltage, unit: 'V', createdAt: now, packetTimestamp, packetId
           });
         }
         if (deviceMetrics.channelUtilization !== undefined && deviceMetrics.channelUtilization !== null && !isNaN(deviceMetrics.channelUtilization)) {
           databaseService.insertTelemetry({
             nodeId, nodeNum: fromNum, telemetryType: 'channelUtilization',
-            timestamp, value: deviceMetrics.channelUtilization, unit: '%', createdAt: now, packetTimestamp
+            timestamp, value: deviceMetrics.channelUtilization, unit: '%', createdAt: now, packetTimestamp, packetId
           });
         }
         if (deviceMetrics.airUtilTx !== undefined && deviceMetrics.airUtilTx !== null && !isNaN(deviceMetrics.airUtilTx)) {
           databaseService.insertTelemetry({
             nodeId, nodeNum: fromNum, telemetryType: 'airUtilTx',
-            timestamp, value: deviceMetrics.airUtilTx, unit: '%', createdAt: now, packetTimestamp
+            timestamp, value: deviceMetrics.airUtilTx, unit: '%', createdAt: now, packetTimestamp, packetId
           });
         }
         if (deviceMetrics.uptimeSeconds !== undefined && deviceMetrics.uptimeSeconds !== null && !isNaN(deviceMetrics.uptimeSeconds)) {
           databaseService.insertTelemetry({
             nodeId, nodeNum: fromNum, telemetryType: 'uptimeSeconds',
-            timestamp, value: deviceMetrics.uptimeSeconds, unit: 's', createdAt: now, packetTimestamp
+            timestamp, value: deviceMetrics.uptimeSeconds, unit: 's', createdAt: now, packetTimestamp, packetId
           });
         }
       } else if (telemetry.environmentMetrics) {
@@ -4083,7 +4117,7 @@ class MeshtasticManager {
           // Deprecated but still supported (use PowerMetrics for new implementations)
           { type: 'envVoltage', value: envMetrics.voltage, unit: 'V' },
           { type: 'envCurrent', value: envMetrics.current, unit: 'A' }
-        ], nodeId, fromNum, timestamp, packetTimestamp);
+        ], nodeId, fromNum, timestamp, packetTimestamp, packetId);
       } else if (telemetry.powerMetrics) {
         const powerMetrics = telemetry.powerMetrics;
 
@@ -4108,7 +4142,7 @@ class MeshtasticManager {
           if (voltage !== undefined && voltage !== null && !isNaN(Number(voltage))) {
             databaseService.insertTelemetry({
               nodeId, nodeNum: fromNum, telemetryType: String(voltageKey),
-              timestamp, value: Number(voltage), unit: 'V', createdAt: now, packetTimestamp
+              timestamp, value: Number(voltage), unit: 'V', createdAt: now, packetTimestamp, packetId
             });
           }
 
@@ -4117,7 +4151,7 @@ class MeshtasticManager {
           if (current !== undefined && current !== null && !isNaN(Number(current))) {
             databaseService.insertTelemetry({
               nodeId, nodeNum: fromNum, telemetryType: String(currentKey),
-              timestamp, value: Number(current), unit: 'mA', createdAt: now, packetTimestamp
+              timestamp, value: Number(current), unit: 'mA', createdAt: now, packetTimestamp, packetId
             });
           }
         }
@@ -4146,7 +4180,7 @@ class MeshtasticManager {
           { type: 'co2', value: aqMetrics.co2, unit: 'ppm' },
           { type: 'co2Temperature', value: aqMetrics.co2Temperature, unit: '°C' },
           { type: 'co2Humidity', value: aqMetrics.co2Humidity, unit: '%' }
-        ], nodeId, fromNum, timestamp, packetTimestamp);
+        ], nodeId, fromNum, timestamp, packetTimestamp, packetId);
       } else if (telemetry.localStats) {
         const localStats = telemetry.localStats;
         logger.debug(`📊 LocalStats telemetry: uptime=${localStats.uptimeSeconds}s, heap_free=${localStats.heapFreeBytes}B`);
@@ -4167,7 +4201,7 @@ class MeshtasticManager {
           { type: 'heapTotalBytes', value: localStats.heapTotalBytes, unit: 'bytes' },
           { type: 'heapFreeBytes', value: localStats.heapFreeBytes, unit: 'bytes' },
           { type: 'numTxDropped', value: localStats.numTxDropped, unit: 'packets' }
-        ], nodeId, fromNum, timestamp, packetTimestamp);
+        ], nodeId, fromNum, timestamp, packetTimestamp, packetId);
       } else if (telemetry.hostMetrics) {
         const hostMetrics = telemetry.hostMetrics;
         logger.debug(`🖥️ HostMetrics telemetry: uptime=${hostMetrics.uptimeSeconds}s, freemem=${hostMetrics.freememBytes}B`);
@@ -4182,7 +4216,7 @@ class MeshtasticManager {
           { type: 'hostLoad1', value: hostMetrics.load1, unit: 'load' },
           { type: 'hostLoad5', value: hostMetrics.load5, unit: 'load' },
           { type: 'hostLoad15', value: hostMetrics.load15, unit: 'load' }
-        ], nodeId, fromNum, timestamp, packetTimestamp);
+        ], nodeId, fromNum, timestamp, packetTimestamp, packetId);
       }
 
       databaseService.upsertNode(nodeData);
@@ -4205,6 +4239,7 @@ class MeshtasticManager {
       // Use server receive time instead of packet time to avoid issues with nodes having incorrect time offsets
       const now = Date.now();
       const timestamp = now; // Store in milliseconds (Unix timestamp in ms)
+      const packetId = meshPacket.id ? Number(meshPacket.id) : undefined;
 
       // Track PKI encryption
       this.trackPKIEncryption(meshPacket, fromNum);
@@ -4230,19 +4265,19 @@ class MeshtasticManager {
       if (paxcount.wifi !== undefined && paxcount.wifi !== null && !isNaN(paxcount.wifi)) {
         databaseService.insertTelemetry({
           nodeId, nodeNum: fromNum, telemetryType: 'paxcounterWifi',
-          timestamp, value: paxcount.wifi, unit: 'devices', createdAt: now
+          timestamp, value: paxcount.wifi, unit: 'devices', createdAt: now, packetId
         });
       }
       if (paxcount.ble !== undefined && paxcount.ble !== null && !isNaN(paxcount.ble)) {
         databaseService.insertTelemetry({
           nodeId, nodeNum: fromNum, telemetryType: 'paxcounterBle',
-          timestamp, value: paxcount.ble, unit: 'devices', createdAt: now
+          timestamp, value: paxcount.ble, unit: 'devices', createdAt: now, packetId
         });
       }
       if (paxcount.uptime !== undefined && paxcount.uptime !== null && !isNaN(paxcount.uptime)) {
         databaseService.insertTelemetry({
           nodeId, nodeNum: fromNum, telemetryType: 'paxcounterUptime',
-          timestamp, value: paxcount.uptime, unit: 's', createdAt: now
+          timestamp, value: paxcount.uptime, unit: 's', createdAt: now, packetId
         });
       }
 
@@ -4629,6 +4664,7 @@ class MeshtasticManager {
         value: tracerouteHops,
         unit: 'hops',
         createdAt: Date.now(),
+        packetId: meshPacket.id ? Number(meshPacket.id) : undefined,
       });
 
       // Emit WebSocket event for traceroute completion
@@ -4729,6 +4765,15 @@ class MeshtasticManager {
       const requestId = meshPacket.decoded?.requestId;
 
       const errorName = getRoutingErrorName(errorReason);
+
+      // Check if this routing update is for an auto-ping session
+      if (requestId) {
+        if (errorReason === 0) {
+          this.handleAutoPingResponse(requestId, 'ack');
+        } else {
+          this.handleAutoPingResponse(requestId, 'nak');
+        }
+      }
 
       // Handle successful ACKs (error_reason = 0 means success)
       if (errorReason === 0 && requestId) {
@@ -7618,6 +7663,361 @@ class MeshtasticManager {
     return normalizedResolved;
   }
 
+  // ==========================================
+  // Auto-Ping Methods
+  // ==========================================
+
+  /**
+   * Handle auto-ping DM commands: "ping N" to start, "ping stop" to cancel
+   * Returns true if the command was handled, false otherwise
+   */
+  async handleAutoPingCommand(message: TextMessage, isDirectMessage: boolean): Promise<boolean> {
+    // Only handle DMs
+    if (!isDirectMessage) return false;
+
+    const text = (message.text || '').trim().toLowerCase();
+
+    // Check if this matches a ping command
+    const pingStartMatch = text.match(/^ping\s+(\d+)$/);
+    const pingStopMatch = text.match(/^ping\s+stop$/);
+
+    if (!pingStartMatch && !pingStopMatch) return false;
+
+    // Check if auto-ping is enabled
+    const autoPingEnabled = databaseService.getSetting('autoPingEnabled');
+    if (autoPingEnabled !== 'true') {
+      logger.debug('⏭️  Auto-ping command received but feature is disabled');
+      return false;
+    }
+
+    const fromNum = message.fromNodeNum;
+    const channelIndex = message.channel ?? 0;
+
+    if (pingStopMatch) {
+      // Handle "ping stop"
+      const session = this.autoPingSessions.get(fromNum);
+      if (session) {
+        logger.info(`🛑 Auto-ping stop requested by !${fromNum.toString(16).padStart(8, '0')}`);
+        this.stopAutoPingSession(fromNum, 'cancelled');
+      } else {
+        await this.sendTextMessage('No active ping session to stop.', 0, fromNum);
+        messageQueueService.recordExternalSend();
+      }
+      return true;
+    }
+
+    if (pingStartMatch) {
+      const count = parseInt(pingStartMatch[1], 10);
+      const maxPings = parseInt(databaseService.getSetting('autoPingMaxPings') || '20', 10);
+      const intervalSeconds = parseInt(databaseService.getSetting('autoPingIntervalSeconds') || '30', 10);
+
+      // Validate count
+      if (count <= 0) {
+        await this.sendTextMessage('Ping count must be at least 1.', 0, fromNum);
+        messageQueueService.recordExternalSend();
+        return true;
+      }
+
+      const actualCount = Math.min(count, maxPings);
+
+      // Check for existing session
+      if (this.autoPingSessions.has(fromNum)) {
+        await this.sendTextMessage(`You already have an active ping session. Send "ping stop" to cancel it first.`, 0, fromNum);
+        messageQueueService.recordExternalSend();
+        return true;
+      }
+
+      // Create session
+      const session: AutoPingSession = {
+        requestedBy: fromNum,
+        channel: channelIndex,
+        totalPings: actualCount,
+        completedPings: 0,
+        successfulPings: 0,
+        failedPings: 0,
+        intervalMs: intervalSeconds * 1000,
+        timer: null,
+        pendingRequestId: null,
+        pendingTimeout: null,
+        startTime: Date.now(),
+        lastPingSentAt: 0,
+        results: [],
+      };
+
+      this.autoPingSessions.set(fromNum, session);
+
+      const cappedMsg = count > maxPings ? ` (capped to ${maxPings})` : '';
+      await this.sendTextMessage(
+        `Starting ${actualCount} pings every ${intervalSeconds}s${cappedMsg}. Send "ping stop" to cancel.`,
+        0, fromNum
+      );
+      messageQueueService.recordExternalSend();
+
+      logger.info(`📡 Auto-ping session started for !${fromNum.toString(16).padStart(8, '0')}: ${actualCount} pings every ${intervalSeconds}s`);
+
+      // Emit session started event
+      this.emitAutoPingUpdate(session, 'started');
+
+      // Start pinging
+      this.startAutoPingSession(session);
+
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Start the auto-ping session — waits one full interval before the first ping
+   */
+  private startAutoPingSession(session: AutoPingSession): void {
+    session.timer = setInterval(() => {
+      this.sendNextAutoPing(session);
+    }, session.intervalMs);
+  }
+
+  /**
+   * Send the next ping in the auto-ping session
+   */
+  private async sendNextAutoPing(session: AutoPingSession): Promise<void> {
+    // Check if session is complete — send summary as the final message
+    if (session.completedPings >= session.totalPings) {
+      this.finalizeAutoPingSession(session.requestedBy);
+      return;
+    }
+
+    // Don't send another ping if one is still pending
+    if (session.pendingRequestId !== null) {
+      return;
+    }
+
+    try {
+      const pingNum = session.completedPings + 1;
+      const pingMessage = `Ping ${pingNum}/${session.totalPings}`;
+
+      const requestId = await this.sendTextMessage(pingMessage, 0, session.requestedBy);
+      messageQueueService.recordExternalSend();
+      session.pendingRequestId = requestId;
+      session.lastPingSentAt = Date.now();
+
+      logger.debug(`📡 Auto-ping ${pingNum}/${session.totalPings} sent to !${session.requestedBy.toString(16).padStart(8, '0')} (requestId: ${requestId})`);
+
+      // Set timeout for this ping
+      const timeoutSeconds = parseInt(databaseService.getSetting('autoPingTimeoutSeconds') || '60', 10);
+      session.pendingTimeout = setTimeout(() => {
+        this.handleAutoPingTimeout(session);
+      }, timeoutSeconds * 1000);
+    } catch (error) {
+      logger.error(`❌ Auto-ping failed to send to !${session.requestedBy.toString(16).padStart(8, '0')}:`, error);
+      // Record as failed
+      session.results.push({
+        pingNum: session.completedPings + 1,
+        status: 'timeout',
+        sentAt: Date.now(),
+      });
+      session.completedPings++;
+      session.failedPings++;
+      this.emitAutoPingUpdate(session, 'ping_result');
+
+      // Session completion is handled by the next interval tick
+    }
+  }
+
+  /**
+   * Handle an ACK or NAK response for a pending auto-ping
+   */
+  handleAutoPingResponse(requestId: number, status: 'ack' | 'nak'): void {
+    // Find session with matching pendingRequestId
+    for (const [nodeNum, session] of this.autoPingSessions) {
+      if (session.pendingRequestId === requestId) {
+        // Clear the timeout
+        if (session.pendingTimeout) {
+          clearTimeout(session.pendingTimeout);
+          session.pendingTimeout = null;
+        }
+
+        const durationMs = Date.now() - session.lastPingSentAt;
+        session.results.push({
+          pingNum: session.completedPings + 1,
+          status,
+          durationMs,
+          sentAt: session.lastPingSentAt,
+        });
+
+        session.completedPings++;
+        if (status === 'ack') {
+          session.successfulPings++;
+        } else {
+          session.failedPings++;
+        }
+        session.pendingRequestId = null;
+
+        logger.info(`📡 Auto-ping ${session.completedPings}/${session.totalPings} ${status.toUpperCase()} from !${nodeNum.toString(16).padStart(8, '0')} (${durationMs}ms)`);
+
+        this.emitAutoPingUpdate(session, 'ping_result');
+
+        // Session completion is handled by the next interval tick in sendNextAutoPing
+        return;
+      }
+    }
+  }
+
+  /**
+   * Handle a timeout for a pending auto-ping (no response received in time)
+   */
+  private handleAutoPingTimeout(session: AutoPingSession): void {
+    if (session.pendingRequestId === null) return;
+
+    session.results.push({
+      pingNum: session.completedPings + 1,
+      status: 'timeout',
+      sentAt: session.lastPingSentAt,
+    });
+
+    session.completedPings++;
+    session.failedPings++;
+    session.pendingRequestId = null;
+    session.pendingTimeout = null;
+
+    logger.info(`⏰ Auto-ping ${session.completedPings}/${session.totalPings} TIMEOUT for !${session.requestedBy.toString(16).padStart(8, '0')}`);
+
+    this.emitAutoPingUpdate(session, 'ping_result');
+
+    // Session completion is handled by the next interval tick in sendNextAutoPing
+  }
+
+  /**
+   * Finalize an auto-ping session (all pings completed)
+   */
+  private async finalizeAutoPingSession(requestedBy: number): Promise<void> {
+    const session = this.autoPingSessions.get(requestedBy);
+    if (!session) return;
+
+    // Remove from map immediately to prevent double-finalize
+    this.autoPingSessions.delete(requestedBy);
+
+    // Clear timers
+    if (session.timer) {
+      clearInterval(session.timer);
+      session.timer = null;
+    }
+    if (session.pendingTimeout) {
+      clearTimeout(session.pendingTimeout);
+      session.pendingTimeout = null;
+    }
+
+    // Build summary with statistics
+    const ackDurations = session.results
+      .filter(r => r.status === 'ack' && r.durationMs)
+      .map(r => r.durationMs!);
+    const timeouts = session.results.filter(r => r.status === 'timeout').length;
+    const naks = session.results.filter(r => r.status === 'nak').length;
+
+    let summary = `Auto-ping done: ${session.successfulPings}/${session.totalPings} ok`;
+    if (ackDurations.length > 0) {
+      const min = Math.min(...ackDurations);
+      const max = Math.max(...ackDurations);
+      const avg = Math.round(ackDurations.reduce((a, b) => a + b, 0) / ackDurations.length);
+      summary += `\nMin/Avg/Max: ${min}/${avg}/${max}ms`;
+    }
+    if (timeouts > 0) {
+      summary += `\nTimeouts: ${timeouts}`;
+    }
+    if (naks > 0) {
+      summary += `\nFailed: ${naks}`;
+    }
+
+    try {
+      await this.sendTextMessage(summary, 0, requestedBy);
+      messageQueueService.recordExternalSend();
+    } catch (error) {
+      logger.error(`❌ Failed to send auto-ping summary to !${requestedBy.toString(16).padStart(8, '0')}:`, error);
+    }
+
+    this.emitAutoPingUpdate(session, 'completed');
+
+    logger.info(`✅ Auto-ping session completed for !${requestedBy.toString(16).padStart(8, '0')}: ${session.successfulPings}/${session.totalPings} successful`);
+  }
+
+  /**
+   * Stop an auto-ping session (user cancelled or force-stopped from UI)
+   */
+  stopAutoPingSession(requestedBy: number, reason: 'cancelled' | 'force_stopped' = 'cancelled'): void {
+    const session = this.autoPingSessions.get(requestedBy);
+    if (!session) return;
+
+    // Clear timers
+    if (session.timer) {
+      clearInterval(session.timer);
+      session.timer = null;
+    }
+    if (session.pendingTimeout) {
+      clearTimeout(session.pendingTimeout);
+      session.pendingTimeout = null;
+    }
+
+    const summary = `Auto-ping ${reason}: ${session.successfulPings}/${session.completedPings} successful out of ${session.totalPings} planned.`;
+
+    this.sendTextMessage(summary, 0, requestedBy).then(() => {
+      messageQueueService.recordExternalSend();
+    }).catch(error => {
+      logger.error(`❌ Failed to send auto-ping cancellation to !${requestedBy.toString(16).padStart(8, '0')}:`, error);
+    });
+
+    this.emitAutoPingUpdate(session, 'cancelled');
+    this.autoPingSessions.delete(requestedBy);
+
+    logger.info(`🛑 Auto-ping session ${reason} for !${requestedBy.toString(16).padStart(8, '0')}`);
+  }
+
+  /**
+   * Get all active auto-ping sessions (for API)
+   */
+  getAutoPingSessions(): Array<{
+    requestedBy: number;
+    requestedByName: string;
+    totalPings: number;
+    completedPings: number;
+    successfulPings: number;
+    failedPings: number;
+    startTime: number;
+    results: AutoPingSession['results'];
+  }> {
+    const sessions: Array<any> = [];
+    for (const [nodeNum, session] of this.autoPingSessions) {
+      const node = databaseService.getNode(nodeNum);
+      sessions.push({
+        requestedBy: nodeNum,
+        requestedByName: node?.longName || node?.shortName || `!${nodeNum.toString(16).padStart(8, '0')}`,
+        totalPings: session.totalPings,
+        completedPings: session.completedPings,
+        successfulPings: session.successfulPings,
+        failedPings: session.failedPings,
+        startTime: session.startTime,
+        results: session.results,
+      });
+    }
+    return sessions;
+  }
+
+  /**
+   * Emit an auto-ping update via WebSocket
+   */
+  private emitAutoPingUpdate(session: AutoPingSession, status: 'started' | 'ping_result' | 'completed' | 'cancelled'): void {
+    const node = databaseService.getNode(session.requestedBy);
+    dataEventEmitter.emitAutoPingUpdate({
+      requestedBy: session.requestedBy,
+      requestedByName: node?.longName || node?.shortName || `!${session.requestedBy.toString(16).padStart(8, '0')}`,
+      totalPings: session.totalPings,
+      completedPings: session.completedPings,
+      successfulPings: session.successfulPings,
+      failedPings: session.failedPings,
+      startTime: session.startTime,
+      status,
+      results: session.results,
+    });
+  }
+
   private async checkAutoResponder(message: TextMessage, isDirectMessage: boolean, packetId?: number): Promise<void> {
     try {
       // Get auto-responder settings from database
@@ -8519,6 +8919,58 @@ class MeshtasticManager {
         features.push('👋');
       }
 
+      // Check auto-ping
+      const autoPingEnabled = databaseService.getSetting('autoPingEnabled');
+      if (autoPingEnabled === 'true') {
+        features.push('🏓');
+      }
+
+      // Check auto-key management
+      const autoKeyManagementEnabled = databaseService.getSetting('autoKeyManagementEnabled');
+      if (autoKeyManagementEnabled === 'true') {
+        features.push('🔑');
+      }
+
+      // Check auto-responder
+      const autoResponderEnabled = databaseService.getSetting('autoResponderEnabled');
+      if (autoResponderEnabled === 'true') {
+        features.push('💬');
+      }
+
+      // Check timed triggers (any enabled trigger)
+      const timerTriggersJson = databaseService.getSetting('timerTriggers');
+      if (timerTriggersJson) {
+        try {
+          const triggers = JSON.parse(timerTriggersJson);
+          if (Array.isArray(triggers) && triggers.some((t: any) => t.enabled)) {
+            features.push('⏱️');
+          }
+        } catch { /* ignore parse errors */ }
+      }
+
+      // Check geofence triggers (any enabled trigger)
+      const geofenceTriggersJson = databaseService.getSetting('geofenceTriggers');
+      if (geofenceTriggersJson) {
+        try {
+          const triggers = JSON.parse(geofenceTriggersJson);
+          if (Array.isArray(triggers) && triggers.some((t: any) => t.enabled)) {
+            features.push('📍');
+          }
+        } catch { /* ignore parse errors */ }
+      }
+
+      // Check remote admin scan
+      const remoteAdminInterval = databaseService.getSetting('remoteAdminScannerIntervalMinutes');
+      if (remoteAdminInterval && parseInt(remoteAdminInterval) > 0) {
+        features.push('🔍');
+      }
+
+      // Check auto time sync
+      const autoTimeSyncEnabled = databaseService.getSetting('autoTimeSyncEnabled');
+      if (autoTimeSyncEnabled === 'true') {
+        features.push('🕐');
+      }
+
       result = result.replace(/{FEATURES}/g, features.join(' '));
     }
 
@@ -8679,6 +9131,58 @@ class MeshtasticManager {
       const autoWelcomeEnabled = databaseService.getSetting('autoWelcomeEnabled');
       if (autoWelcomeEnabled === 'true') {
         features.push('👋');
+      }
+
+      // Check auto-ping
+      const autoPingEnabled = databaseService.getSetting('autoPingEnabled');
+      if (autoPingEnabled === 'true') {
+        features.push('🏓');
+      }
+
+      // Check auto-key management
+      const autoKeyManagementEnabled = databaseService.getSetting('autoKeyManagementEnabled');
+      if (autoKeyManagementEnabled === 'true') {
+        features.push('🔑');
+      }
+
+      // Check auto-responder
+      const autoResponderEnabled = databaseService.getSetting('autoResponderEnabled');
+      if (autoResponderEnabled === 'true') {
+        features.push('💬');
+      }
+
+      // Check timed triggers (any enabled trigger)
+      const timerTriggersJson = databaseService.getSetting('timerTriggers');
+      if (timerTriggersJson) {
+        try {
+          const triggers = JSON.parse(timerTriggersJson);
+          if (Array.isArray(triggers) && triggers.some((t: any) => t.enabled)) {
+            features.push('⏱️');
+          }
+        } catch { /* ignore parse errors */ }
+      }
+
+      // Check geofence triggers (any enabled trigger)
+      const geofenceTriggersJson = databaseService.getSetting('geofenceTriggers');
+      if (geofenceTriggersJson) {
+        try {
+          const triggers = JSON.parse(geofenceTriggersJson);
+          if (Array.isArray(triggers) && triggers.some((t: any) => t.enabled)) {
+            features.push('📍');
+          }
+        } catch { /* ignore parse errors */ }
+      }
+
+      // Check remote admin scan
+      const remoteAdminInterval = databaseService.getSetting('remoteAdminScannerIntervalMinutes');
+      if (remoteAdminInterval && parseInt(remoteAdminInterval) > 0) {
+        features.push('🔍');
+      }
+
+      // Check auto time sync
+      const autoTimeSyncEnabled = databaseService.getSetting('autoTimeSyncEnabled');
+      if (autoTimeSyncEnabled === 'true') {
+        features.push('🕐');
       }
 
       result = result.replace(/{FEATURES}/g, encode(features.join(' ')));
