@@ -328,6 +328,8 @@ class MeshtasticManager {
     moduleConfig: any;
     lastUpdated: number;
   }> = new Map();
+  // Track pending module config requests so empty Proto3 responses can be mapped to the correct key
+  private pendingModuleConfigRequests: Map<number, string> = new Map();
   // Per-node channel storage for remote nodes
   private remoteNodeChannels: Map<number, Map<number, any>> = new Map();
   // Per-node owner storage for remote nodes
@@ -2882,7 +2884,7 @@ class MeshtasticManager {
   /**
    * Get the current device configuration
    */
-  getCurrentConfig(): { deviceConfig: any; moduleConfig: any; localNodeInfo: any } {
+  getCurrentConfig(): { deviceConfig: any; moduleConfig: any; localNodeInfo: any; supportedModules: { statusmessage: boolean; trafficManagement: boolean } } {
     logger.info(`[CONFIG] getCurrentConfig called - hopLimit=${this.actualDeviceConfig?.lora?.hopLimit}`);
 
     // Apply Proto3 defaults to device config if it exists
@@ -3032,10 +3034,57 @@ class MeshtasticManager {
       logger.debug(`[CONFIG] Converted network config IP addresses to strings`);
     }
 
+    // Apply Proto3 defaults to StatusMessage module config
+    if (moduleConfig.statusmessage) {
+      const statusMessageConfigWithDefaults = {
+        ...moduleConfig.statusmessage,
+        nodeStatus: moduleConfig.statusmessage.nodeStatus !== undefined ? moduleConfig.statusmessage.nodeStatus : ''
+      };
+
+      moduleConfig = {
+        ...moduleConfig,
+        statusmessage: statusMessageConfigWithDefaults
+      };
+
+      logger.info(`[CONFIG] Returning StatusMessage config with nodeStatus="${statusMessageConfigWithDefaults.nodeStatus}"`);
+    }
+
+    // Apply Proto3 defaults to TrafficManagement module config
+    if (moduleConfig.trafficManagement) {
+      const trafficManagementConfigWithDefaults = {
+        ...moduleConfig.trafficManagement,
+        enabled: moduleConfig.trafficManagement.enabled !== undefined ? moduleConfig.trafficManagement.enabled : false,
+        positionDedupEnabled: moduleConfig.trafficManagement.positionDedupEnabled !== undefined ? moduleConfig.trafficManagement.positionDedupEnabled : false,
+        positionDedupTimeSecs: moduleConfig.trafficManagement.positionDedupTimeSecs !== undefined ? moduleConfig.trafficManagement.positionDedupTimeSecs : 0,
+        positionDedupDistanceMeters: moduleConfig.trafficManagement.positionDedupDistanceMeters !== undefined ? moduleConfig.trafficManagement.positionDedupDistanceMeters : 0,
+        nodeinfoDirectResponseEnabled: moduleConfig.trafficManagement.nodeinfoDirectResponseEnabled !== undefined ? moduleConfig.trafficManagement.nodeinfoDirectResponseEnabled : false,
+        nodeinfoDirectResponseMyNodeOnly: moduleConfig.trafficManagement.nodeinfoDirectResponseMyNodeOnly !== undefined ? moduleConfig.trafficManagement.nodeinfoDirectResponseMyNodeOnly : false,
+        rateLimitEnabled: moduleConfig.trafficManagement.rateLimitEnabled !== undefined ? moduleConfig.trafficManagement.rateLimitEnabled : false,
+        rateLimitMaxPerNode: moduleConfig.trafficManagement.rateLimitMaxPerNode !== undefined ? moduleConfig.trafficManagement.rateLimitMaxPerNode : 0,
+        rateLimitWindowSecs: moduleConfig.trafficManagement.rateLimitWindowSecs !== undefined ? moduleConfig.trafficManagement.rateLimitWindowSecs : 0,
+        unknownPacketDropEnabled: moduleConfig.trafficManagement.unknownPacketDropEnabled !== undefined ? moduleConfig.trafficManagement.unknownPacketDropEnabled : false,
+        unknownPacketGracePeriodSecs: moduleConfig.trafficManagement.unknownPacketGracePeriodSecs !== undefined ? moduleConfig.trafficManagement.unknownPacketGracePeriodSecs : 0,
+        hopExhaustionEnabled: moduleConfig.trafficManagement.hopExhaustionEnabled !== undefined ? moduleConfig.trafficManagement.hopExhaustionEnabled : false,
+        hopExhaustionMinHops: moduleConfig.trafficManagement.hopExhaustionMinHops !== undefined ? moduleConfig.trafficManagement.hopExhaustionMinHops : 0,
+        hopExhaustionMaxHops: moduleConfig.trafficManagement.hopExhaustionMaxHops !== undefined ? moduleConfig.trafficManagement.hopExhaustionMaxHops : 0
+      };
+
+      moduleConfig = {
+        ...moduleConfig,
+        trafficManagement: trafficManagementConfigWithDefaults
+      };
+
+      logger.info(`[CONFIG] Returning TrafficManagement config with enabled=${trafficManagementConfigWithDefaults.enabled}`);
+    }
+
     return {
       deviceConfig,
       moduleConfig,
-      localNodeInfo: this.localNodeInfo
+      localNodeInfo: this.localNodeInfo,
+      supportedModules: {
+        statusmessage: !!moduleConfig.statusmessage,
+        trafficManagement: !!moduleConfig.trafficManagement
+      }
     };
   }
 
@@ -3370,7 +3419,7 @@ class MeshtasticManager {
       // Only set default name if this is a brand new node
       if (!existingNode) {
         nodeData.longName = `Node ${nodeId}`;
-        nodeData.shortName = nodeId.substring(1, 5);
+        nodeData.shortName = nodeId.slice(-4);
       }
 
       // Only include SNR/RSSI if they have valid values
@@ -3489,7 +3538,7 @@ class MeshtasticManager {
             nodeNum: fromNum,
             nodeId: fromNodeId,
             longName: `Node ${fromNodeId}`,
-            shortName: fromNodeId.substring(1, 5),
+            shortName: fromNodeId.slice(-4),
             lastHeard: Date.now() / 1000,
             createdAt: Date.now(),
             updatedAt: Date.now()
@@ -4316,7 +4365,7 @@ class MeshtasticManager {
           nodeNum: fromNum,
           nodeId: fromNodeId,
           longName: `Node ${fromNodeId}`,
-          shortName: fromNodeId.substring(1, 5),
+          shortName: fromNodeId.slice(-4),
           lastHeard: Date.now() / 1000
         });
       } else {
@@ -4335,7 +4384,7 @@ class MeshtasticManager {
           nodeNum: toNum,
           nodeId: toNodeId,
           longName: `Node ${toNodeId}`,
-          shortName: toNodeId.substring(1, 5),
+          shortName: toNodeId.slice(-4),
           lastHeard: Date.now() / 1000
         });
       } else {
@@ -4939,7 +4988,7 @@ class MeshtasticManager {
             nodeNum,
             nodeId,
             longName: `Node ${nodeId}`,
-            shortName: nodeId.substring(1, 5),
+            shortName: nodeId.slice(-4),
             lastHeard: Date.now() / 1000
           });
           node = databaseService.getNode(nodeNum);
@@ -5085,7 +5134,7 @@ class MeshtasticManager {
           nodeNum: fromNum,
           nodeId: fromNodeId,
           longName: `Node ${fromNodeId}`,
-          shortName: fromNodeId.substring(1, 5),
+          shortName: fromNodeId.slice(-4),
           lastHeard: Date.now() / 1000
         });
         senderNode = databaseService.getNode(fromNum);
@@ -5113,7 +5162,7 @@ class MeshtasticManager {
               nodeNum: neighborNodeNum,
               nodeId: neighborNodeId,
               longName: `Node ${neighborNodeId}`,
-              shortName: neighborNodeId.substring(1, 5),
+              shortName: neighborNodeId.slice(-4),
               hopsAway: senderHopsAway + 1,
               lastHeard: Date.now() / 1000
             });
@@ -5545,7 +5594,7 @@ class MeshtasticManager {
           nodeNum: nodeNum,
           nodeId: nodeId,
           longName: possibleName.longName || `Node ${nodeId}`,
-          shortName: possibleName.shortName || nodeId.substring(1, 5),
+          shortName: possibleName.shortName || nodeId.slice(-4),
           hwModel: possibleName.hwModel || 0,
           lastHeard: Date.now() / 1000,
           snr: possibleName.snr,
@@ -6517,7 +6566,7 @@ class MeshtasticManager {
           nodeNum: fromNodeNum,
           nodeId: fromNodeId,
           longName: fromNodeId === 'unknown' ? 'Unknown Node' : fromNodeId,
-          shortName: fromNodeId === 'unknown' ? 'UNK' : fromNodeId.substring(1, 5),
+          shortName: fromNodeId === 'unknown' ? 'UNK' : fromNodeId.slice(-4),
           hwModel: 0,
           lastHeard: Date.now() / 1000,
           createdAt: Date.now(),
@@ -6544,7 +6593,7 @@ class MeshtasticManager {
           nodeNum: toNodeNum,
           nodeId: toNodeId,
           longName: toNodeId === '!ffffffff' ? 'Broadcast' : toNodeId,
-          shortName: toNodeId === '!ffffffff' ? 'BCST' : toNodeId.substring(1, 5),
+          shortName: toNodeId === '!ffffffff' ? 'BCST' : toNodeId.slice(-4),
           hwModel: 0,
           lastHeard: Date.now() / 1000,
           createdAt: Date.now(),
@@ -8784,7 +8833,7 @@ class MeshtasticManager {
           logger.debug(`⏭️  Skipping auto-welcome for ${nodeId} - waiting for proper name (current: ${node.longName})`);
           return;
         }
-        if (!node.shortName || node.shortName === nodeId.substring(1, 5)) {
+        if (!node.shortName || node.shortName === nodeId.slice(-4)) {
           logger.debug(`⏭️  Skipping auto-welcome for ${nodeId} - waiting for proper short name (current: ${node.shortName})`);
           return;
         }
@@ -9246,6 +9295,13 @@ class MeshtasticManager {
     return result;
   }
 
+  /**
+   * Public wrapper for replaceAnnouncementTokens, used by the preview API endpoint.
+   */
+  public async previewAnnouncementMessage(message: string): Promise<string> {
+    return this.replaceAnnouncementTokens(message);
+  }
+
   private async replaceAcknowledgementTokens(message: string, nodeId: string, fromNum: number, numberHops: number, date: string, time: string, channelIndex: number, isDirectMessage: boolean, rxSnr?: number, rxRssi?: number, viaMqtt?: boolean, urlEncode: boolean = false): Promise<string> {
     // Start with base announcement tokens (includes {IP}, {PORT}, {VERSION}, {DURATION}, {FEATURES}, {NODECOUNT}, {DIRECTCOUNT})
     let result = await this.replaceAnnouncementTokens(message, urlEncode);
@@ -9456,12 +9512,22 @@ class MeshtasticManager {
           const moduleConfigResponse = adminMsg.getModuleConfigResponse;
           if (moduleConfigResponse) {
             // Merge all module config fields that exist in the response
-            Object.keys(moduleConfigResponse).forEach((key) => {
-              // Skip internal protobuf fields
-              if (key !== 'payloadVariant' && moduleConfigResponse[key] !== undefined) {
-                nodeConfig.moduleConfig[key] = moduleConfigResponse[key];
-              }
+            const responseKeys = Object.keys(moduleConfigResponse).filter(k => k !== 'payloadVariant' && moduleConfigResponse[k] !== undefined);
+            responseKeys.forEach((key) => {
+              nodeConfig.moduleConfig[key] = moduleConfigResponse[key];
             });
+
+            // Proto3 omits all-default fields, so an empty getModuleConfigResponse means
+            // the node responded with a config where all values are defaults.
+            // Use the pending request tracker to store an empty config under the correct key.
+            if (responseKeys.length === 0) {
+              const pendingKey = this.pendingModuleConfigRequests.get(fromNum);
+              if (pendingKey) {
+                logger.info(`📊 Empty module config response from node ${fromNum}, storing defaults for '${pendingKey}'`);
+                nodeConfig.moduleConfig[pendingKey] = {};
+                this.pendingModuleConfigRequests.delete(fromNum);
+              }
+            }
           }
           nodeConfig.lastUpdated = Date.now();
           logger.info(`📊 Stored module config response from remote node ${fromNum}, keys:`, Object.keys(nodeConfig.moduleConfig));
@@ -10040,7 +10106,8 @@ class MeshtasticManager {
           0: 'mqtt',
           5: 'telemetry',
           9: 'neighborInfo',
-          13: 'statusmessage'
+          13: 'statusmessage',
+          14: 'trafficManagement'
         };
         const configKey = moduleConfigMap[configType];
         if (configKey) {
@@ -10063,6 +10130,18 @@ class MeshtasticManager {
           if (nodeConfig?.deviceConfig) {
             delete nodeConfig.deviceConfig[configKey];
           }
+        }
+      }
+
+      // Track pending module config request so empty Proto3 responses can be mapped
+      if (isModuleConfig) {
+        const moduleConfigMap: { [key: number]: string } = {
+          0: 'mqtt', 5: 'telemetry', 9: 'neighborInfo',
+          13: 'statusmessage', 14: 'trafficManagement'
+        };
+        const pendingKey = moduleConfigMap[configType];
+        if (pendingKey) {
+          this.pendingModuleConfigRequests.set(destinationNodeNum, pendingKey);
         }
       }
 
@@ -10090,7 +10169,8 @@ class MeshtasticManager {
               0: 'mqtt',
               5: 'telemetry',
               9: 'neighborInfo',
-              13: 'statusmessage'
+              13: 'statusmessage',
+              14: 'trafficManagement'
             };
             const configKey = moduleConfigMap[configType];
             if (configKey && nodeConfig.moduleConfig?.[configKey]) {
