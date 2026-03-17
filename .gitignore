@@ -71,3 +71,6 @@ tiles/*.pbf
 
 # Test output
 test-results.txt
+
+# Meshtastic export files (contain secrets)
+export.yaml
