@@ -1,0 +1,145 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: brain
+---
+# State for registered OAuth clients. Small, but must survive restarts —
+# otherwise Claude's connector has to re-register after every rollout.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: brain-mcp-state
+  namespace: brain
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 128Mi
+  # storageClassName: local-path   # set to whatever neuron's cluster uses
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: brain-mcp
+  namespace: brain
+  labels: { app: brain-mcp }
+spec:
+  replicas: 1                     # hostPath vault + RWO state PVC = single node
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: brain-mcp }
+  template:
+    metadata:
+      labels: { app: brain-mcp }
+    spec:
+      # The vault lives on neuron's disk, so pin the pod there.
+      nodeSelector:
+        kubernetes.io/hostname: neuron
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: brain-mcp
+          image: ghcr.io/dpaschal/brain-mcp:0.1.0   # <- change to your registry
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 8080 }
+          env:
+            - { name: BRAIN_VAULT_PATH, value: /vault }
+            - { name: BRAIN_STATE_PATH, value: /state/clients.json }
+            - { name: PORT, value: "8080" }
+            # Must exactly match the public hostname Cloudflare serves, no trailing slash.
+            - { name: BRAIN_PUBLIC_URL, value: "https://brain.CHANGEME.com" }
+            # Start read-only. Flip to "true" once you trust it.
+            - { name: BRAIN_ALLOW_WRITE, value: "false" }
+            - name: BRAIN_JWT_SECRET
+              valueFrom: { secretKeyRef: { name: brain-mcp, key: jwt-secret } }
+            - name: BRAIN_AUTH_PASSWORD
+              valueFrom: { secretKeyRef: { name: brain-mcp, key: auth-password } }
+          volumeMounts:
+            - name: vault
+              mountPath: /vault
+              readOnly: true       # set false only when BRAIN_ALLOW_WRITE=true
+            - name: state
+              mountPath: /state
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits:   { memory: 384Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+      volumes:
+        - name: vault
+          hostPath:
+            path: /srv/obsidian/brain      # <- actual vault path on neuron
+            type: Directory
+        - name: state
+          persistentVolumeClaim:
+            claimName: brain-mcp-state
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: brain-mcp
+  namespace: brain
+spec:
+  selector: { app: brain-mcp }
+  ports:
+    - { name: http, port: 80, targetPort: http }
+---
+# cloudflared publishes the Service to the internet without opening a port on
+# your router. Create the tunnel in the Cloudflare dashboard, point the public
+# hostname at http://brain-mcp.brain.svc.cluster.local:80, then put the tunnel
+# token in the secret below.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: brain
+  labels: { app: cloudflared }
+spec:
+  replicas: 2                     # two connectors so a rollout is not an outage
+  selector:
+    matchLabels: { app: cloudflared }
+  template:
+    metadata:
+      labels: { app: cloudflared }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:latest
+          args:
+            - tunnel
+            - --no-autoupdate
+            - --metrics
+            - 0.0.0.0:2000
+            - run
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom: { secretKeyRef: { name: cloudflared, key: tunnel-token } }
+          livenessProbe:
+            httpGet: { path: /ready, port: 2000 }
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 25m, memory: 48Mi }
+            limits:   { memory: 192Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }

@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.log
+
+# Real secrets never land in git — only secrets.example.yaml is tracked.
+k8s/secrets.yaml
